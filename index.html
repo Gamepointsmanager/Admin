@@ -768,23 +768,24 @@
                 <div style="font-family:'Orbitron',monospace;font-size:26px;font-weight:900;color:${status.color}">${isUnlimited ? '∞' : (daysLeft !== null && daysLeft > 0 ? daysLeft : '0')}</div>
                 <div style="font-size:11px;color:var(--textSecondary);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:3px">${isUnlimited ? 'Unlimited' : 'Days Left'}</div>
               </div>
-              <div id="statusToggleCard" style="padding:16px;border-radius:12px;background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(34,211,238,0.06));border:1px solid rgba(124,58,237,0.2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s" title="Click to ${u.isDisabled ? 'enable' : 'disable'} user">
+              <div style="padding:16px;border-radius:12px;background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(34,211,238,0.06));border:1px solid rgba(124,58,237,0.2);display:flex;flex-direction:column;align-items:center;justify-content:center">
                 <span class="user-status ${status.cls}" style="font-size:14px;padding:7px 18px;font-weight:800">${status.label}</span>
-                <div style="font-size:9px;color:var(--textMuted);margin-top:4px">tap to toggle</div>
+                <div style="font-size:9px;color:var(--textMuted);margin-top:4px">Status</div>
               </div>
             </div>
             <div style="margin-bottom:20px;padding:14px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(20,16,40,0.6),rgba(30,24,55,0.4));border:1px solid rgba(120,100,200,0.15)">
               <div style="font-size:13px;line-height:2.6">
-                <div style="display:flex;align-items:flex-start;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" style="flex-shrink:0;margin-top:4px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg><div><span style="color:#c4b5fd;font-weight:700;font-size:11px">UID</span><br><span style="font-size:11px;color:var(--textSecondary);font-family:monospace;word-break:break-all">${u.uid}</span></div></div>
-                <div style="display:flex;align-items:flex-start;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" style="flex-shrink:0;margin-top:4px"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg><div><span style="color:#fbbf24;font-weight:700;font-size:11px">EXPIRES</span><br>${u.expiryDate ? (isUnlimited ? '<span style="color:#34d399;font-weight:700">♾️ Unlimited Access</span>' : '<span style="color:var(--textSecondary);font-weight:600">' + formatDate(u.expiryDate) + '</span>') : '<span style="color:#f87171;font-weight:600">Not set</span>'}</div></div>
-                <div style="display:flex;align-items:flex-start;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" style="flex-shrink:0;margin-top:4px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10,17 15,12 10,7"/><line x1="15" y1="12" x2="3" y2="12"/></svg><div><span style="color:#22d3ee;font-weight:700;font-size:11px">LAST LOGIN</span><br>${fmtTs(u.lastLogin)}</div></div>
-                <div style="display:flex;align-items:flex-start;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" style="flex-shrink:0;margin-top:4px"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg><div><span style="color:#34d399;font-weight:700;font-size:11px">REGISTERED</span><br>${fmtTs(u.createdAt)}</div></div>
+                <div style="display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg><div><span style="color:#c4b5fd;font-weight:700;font-size:11px">UID</span><br><span style="font-size:11px;color:var(--textSecondary);font-family:monospace;word-break:break-all">${u.uid}</span></div></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg><div><span style="color:#fbbf24;font-weight:700;font-size:11px">EXPIRES</span><br>${u.expiryDate ? (isUnlimited ? '<span style="color:#34d399;font-weight:700">♾️ Unlimited Access</span>' : '<span style="color:var(--textSecondary);font-weight:600">' + formatDate(u.expiryDate) + '</span>') : '<span style="color:#f87171;font-weight:600">Not set</span>'}</div></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" style="flex-shrink:0"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10,17 15,12 10,7"/><line x1="15" y1="12" x2="3" y2="12"/></svg><div><span style="color:#22d3ee;font-weight:700;font-size:11px">LAST LOGIN</span><br>${fmtTs(u.lastLogin)}</div></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" style="flex-shrink:0"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg><div><span style="color:#34d399;font-weight:700;font-size:11px">REGISTERED</span><br>${fmtTs(u.createdAt)}</div></div>
               </div>
             </div>
             <div style="margin-bottom:16px"><div style="font-size:12px;color:#fbbf24;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Quick Actions</div><div class="btn-row"><button class="btn btn-gold" id="freeTrialBtn" style="font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/></svg>Free Trial · 3 days</button><button class="btn btn-emerald" id="unlimitedBtn" style="font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg>Unlimited Access</button></div></div>
             <div style="margin-bottom:16px"><div style="font-size:12px;color:#34d399;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Extend Access</div><div class="btn-row"><button class="btn btn-green extend-btn" data-days="7" style="font-weight:700">+7 Days</button><button class="btn btn-blue extend-btn" data-days="30" style="font-weight:700">+30 Days</button><button class="btn btn-purple extend-btn" data-days="90" style="font-weight:700">+90 Days</button><button class="btn btn-cyan extend-btn" data-days="365" style="font-weight:700">+1 Year</button></div></div>
             <div style="margin-bottom:16px"><div style="font-size:12px;color:#22d3ee;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Custom Days</div><div style="display:flex;gap:8px"><input type="number" id="customDays" min="1" max="3650" placeholder="Enter days..." style="flex:1;padding:11px 14px;border-radius:10px;border:1px solid rgba(90,75,145,0.4);background:var(--bgInput);color:var(--textPrimary);font-size:15px;font-weight:600;outline:none;font-family:'Rajdhani',sans-serif" /><button class="btn btn-orange" id="customExtendBtn" style="font-weight:800;font-size:14px">Add</button></div></div>
-            <div style="border-top:1px solid rgba(239,68,68,0.15);padding-top:16px"><div style="font-size:12px;color:#f87171;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Danger Zone</div><div class="btn-row"><button class="btn btn-red" id="revokeBtn" style="font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>Revoke Access</button></div></div>
+            <div style="border-top:1px solid rgba(239,68,68,0.15);padding-top:16px"><div style="font-size:12px;color:#f87171;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Danger Zone</div><div class="btn-row"><button class="btn btn-red" id="revokeBtn" style="font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>Revoke Access</button><button class="btn btn-red" id="deleteAccountBtn" style="font-weight:800;background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>Delete Account</button></div></div>
+            <div style="border-top:1px solid rgba(59,130,246,0.15);padding-top:16px;margin-top:16px"><div style="font-size:12px;color:var(--blue);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Data Export</div><div class="btn-row"><button class="btn btn-blue" id="downloadDataBtn" style="font-weight:800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download User Data</button></div></div>
           </div>
         </div>`;
       document.body.appendChild(overlay);
@@ -796,9 +797,7 @@
       if (closeBtn) closeBtn.onclick = closeModal;
       if (overlay) overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-      // Clickable status card toggles enable/disable
-      const statusCard = document.getElementById('statusToggleCard');
-      if (statusCard) statusCard.onclick = toggleDisable;
+      // Status card is now display-only (no toggle)
 
       document.querySelectorAll('.extend-btn').forEach(btn => {
         btn.onclick = () => extendAccess(parseInt(btn.dataset.days));
@@ -854,6 +853,12 @@
 
       const revokeBtn = document.getElementById('revokeBtn');
       if (revokeBtn) revokeBtn.onclick = revokeAccess;
+
+      const deleteBtn = document.getElementById('deleteAccountBtn');
+      if (deleteBtn) deleteBtn.onclick = showDeleteConfirmation;
+
+      const downloadBtn = document.getElementById('downloadDataBtn');
+      if (downloadBtn) downloadBtn.onclick = downloadUserData;
     }
 
     function closeModal() {
@@ -919,6 +924,171 @@
         closeModal();
       } catch(e) {
         showToast('❌ Failed: ' + e.message, 'error');
+      }
+    }
+
+    // ============================================================
+    // DELETE ACCOUNT (with custom confirmation dialog)
+    // ============================================================
+    function showDeleteConfirmation() {
+      const u = state.selectedUser;
+      if (!u) return;
+
+      // Remove existing confirmation if any
+      const existing = document.getElementById('deleteConfirmModal');
+      if (existing) existing.remove();
+
+      const confirmOverlay = document.createElement('div');
+      confirmOverlay.id = 'deleteConfirmModal';
+      confirmOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)';
+      confirmOverlay.innerHTML = `
+        <div class="fade-in" style="background:rgba(20,12,35,0.97);border:1px solid rgba(239,68,68,0.35);border-radius:18px;max-width:420px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,0.7),0 0 60px rgba(239,68,68,0.12);text-align:center">
+          <div style="width:56px;height:56px;border-radius:50%;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 18px">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 style="font-family:'Orbitron',monospace;font-size:16px;color:#f87171;margin-bottom:12px;letter-spacing:1px">DELETE ACCOUNT</h3>
+          <p style="color:var(--textSecondary);font-size:14px;line-height:1.6;margin-bottom:6px">Do you want to delete this account?</p>
+          <p style="color:var(--textPrimary);font-size:15px;font-weight:700;margin-bottom:6px">${u.displayName || 'No Name'}</p>
+          <p style="color:var(--textMuted);font-size:13px;margin-bottom:24px">${u.email}</p>
+          <p style="color:#f87171;font-size:12px;font-weight:600;margin-bottom:24px;padding:10px;border-radius:8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15)">⚠️ This action is permanent and cannot be undone. All user data will be removed from Firestore.</p>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button id="deleteConfirmNo" class="btn" style="font-weight:800;padding:12px 32px;border-color:rgba(120,100,200,0.3);background:rgba(120,100,200,0.08);color:var(--textSecondary);font-size:14px;min-width:100px">No</button>
+            <button id="deleteConfirmYes" class="btn btn-red" style="font-weight:800;padding:12px 32px;background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.5);font-size:14px;min-width:100px">Yes</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(confirmOverlay);
+
+      // Close on clicking overlay background
+      confirmOverlay.onclick = (e) => { if (e.target === confirmOverlay) confirmOverlay.remove(); };
+
+      document.getElementById('deleteConfirmNo').onclick = () => confirmOverlay.remove();
+      document.getElementById('deleteConfirmYes').onclick = () => {
+        confirmOverlay.remove();
+        deleteAccount();
+      };
+    }
+
+    async function deleteAccount() {
+      const u = state.selectedUser;
+      if (!u) return;
+      try {
+        // Delete all known sub-collections and the main userAccess doc
+        // First delete from userAccess
+        await db.collection('userAccess').doc(u.uid).delete();
+
+        // Also try to delete from gbUsernames if the user has one
+        if (u.gbUsername) {
+          try {
+            await db.collection('gbUsernames').doc(u.gbUsername.toLowerCase()).delete();
+          } catch(e) { /* username doc may not exist */ }
+        }
+
+        // Try to delete user-specific sub-collections (companies, payments, bills etc.)
+        const subcollections = ['companies', 'payments', 'bills', 'subscriptions'];
+        for (const sub of subcollections) {
+          try {
+            const snap = await db.collection('userAccess').doc(u.uid).collection(sub).get();
+            const batch = db.batch();
+            snap.docs.forEach(doc => batch.delete(doc.ref));
+            if (snap.docs.length > 0) await batch.commit();
+          } catch(e) { /* subcollection may not exist */ }
+        }
+
+        showToast('🗑️ Account deleted: ' + u.email, 'success');
+        closeModal();
+      } catch(e) {
+        showToast('❌ Delete failed: ' + e.message, 'error');
+      }
+    }
+
+    // ============================================================
+    // DOWNLOAD USER DATA
+    // ============================================================
+    async function downloadUserData() {
+      const u = state.selectedUser;
+      if (!u) return;
+
+      const downloadBtn = document.getElementById('downloadDataBtn');
+      if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.innerHTML = '<span style="animation:pulse 1s infinite">Fetching data...</span>';
+      }
+
+      try {
+        const userData = {
+          _exportedAt: new Date().toISOString(),
+          _exportedBy: state.user?.email || 'admin',
+          uid: u.uid,
+          profile: {}
+        };
+
+        // Copy all top-level fields from userAccess doc
+        const docSnap = await db.collection('userAccess').doc(u.uid).get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          // Convert Firestore timestamps to ISO strings for JSON
+          for (const [key, val] of Object.entries(data)) {
+            if (val && typeof val === 'object' && typeof val.toDate === 'function') {
+              userData.profile[key] = val.toDate().toISOString();
+            } else {
+              userData.profile[key] = val;
+            }
+          }
+        }
+
+        // Fetch known sub-collections
+        const subcollections = ['companies', 'payments', 'bills', 'subscriptions', 'games', 'history'];
+        for (const sub of subcollections) {
+          try {
+            const snap = await db.collection('userAccess').doc(u.uid).collection(sub).get();
+            if (snap.docs.length > 0) {
+              userData[sub] = snap.docs.map(doc => {
+                const d = doc.data();
+                const converted = { _id: doc.id };
+                for (const [key, val] of Object.entries(d)) {
+                  if (val && typeof val === 'object' && typeof val.toDate === 'function') {
+                    converted[key] = val.toDate().toISOString();
+                  } else {
+                    converted[key] = val;
+                  }
+                }
+                return converted;
+              });
+            }
+          } catch(e) { /* subcollection may not exist, skip silently */ }
+        }
+
+        // Also check gbUsernames
+        if (u.gbUsername) {
+          try {
+            const unSnap = await db.collection('gbUsernames').doc(u.gbUsername.toLowerCase()).get();
+            if (unSnap.exists) {
+              userData.gbUsernameRecord = unSnap.data();
+            }
+          } catch(e) {}
+        }
+
+        // Generate and download JSON file
+        const jsonStr = JSON.stringify(userData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `gamebill_user_${u.gbUsername || u.uid}_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('📥 User data downloaded', 'success');
+      } catch(e) {
+        showToast('❌ Download failed: ' + e.message, 'error');
+      } finally {
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download User Data';
+        }
       }
     }
 
