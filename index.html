@@ -962,7 +962,12 @@
 
         <!-- Message Status -->
         <div class="detail-section" id="msgStatusSection">
-          <div class="detail-section-title" style="color:#22d3ee"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>Message Status</div>
+          <div class="detail-section-title" style="color:#22d3ee;display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>Message Status</span>
+            <button onclick="deleteAllUserMessages('${u.uid}')" style="padding:4px 10px;border-radius:7px;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.1);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;gap:4px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M9,6V4h6v2"/></svg>Delete All
+            </button>
+          </div>
           <div id="msgStatusContent" style="color:var(--textMuted);font-size:13px;font-weight:600">Loading messages...</div>
         </div>
       </div>`;
@@ -1057,7 +1062,6 @@
       const container = document.getElementById('msgStatusContent');
       if (!container) return;
       try {
-        // No orderBy — avoids needing a composite index. We sort in JS instead.
         const [userMsgs, allMsgs] = await Promise.all([
           db.collection('popupMessages').where('targetUid','==',uid).limit(20).get(),
           db.collection('popupMessages').where('targetAll','==',true).limit(10).get()
@@ -1069,7 +1073,6 @@
           seen.add(doc.id);
           docs.push(doc);
         }
-        // Sort newest first in JS
         docs.sort((a,b) => (b.data().createdAt?.seconds||0) - (a.data().createdAt?.seconds||0));
 
         if (docs.length === 0) {
@@ -1078,6 +1081,7 @@
         }
 
         const typeColors = { info:'#60a5fa', success:'#34d399', warning:'#fbbf24', error:'#f87171' };
+        const typeLabels = { info:'INFO', success:'SUCCESS', warning:'WARNING', error:'ALERT' };
 
         container.innerHTML = docs.map(doc => {
           const d = doc.data();
@@ -1085,38 +1089,51 @@
             ? new Date(d.createdAt.seconds*1000).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
             : 'Sending…';
           const col = typeColors[d.type] || '#60a5fa';
+          const typeLabel = typeLabels[d.type] || (d.type||'INFO').toUpperCase();
 
+          // Status logic:
+          // read:true  → user tapped "Got it — Dismiss" (fully dismissed)
+          // dismissed:true AND read:false → user tapped "Remind Later" (snoozed client-side; dismissed flag may not be set server-side in remind flow)
+          // both false → pending, not yet seen
           let statusDot, statusLabel;
-          if (d.dismissed) {
-            statusDot = '#fbbf24';
-            statusLabel = '<span style="color:#fbbf24;font-weight:700">⏰ Remind Later</span>';
-          } else if (d.read) {
+          if (d.read) {
+            // read:true means fully dismissed/acknowledged
             statusDot = '#34d399';
-            statusLabel = '<span style="color:#34d399;font-weight:700">✓ Read</span>';
+            statusLabel = '<span style="color:#34d399;font-weight:700;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>Dismissed / Read</span>';
+          } else if (d.dismissed) {
+            // dismissed but not read → remind later was pressed (legacy path or server-set)
+            statusDot = '#fbbf24';
+            statusLabel = '<span style="color:#fbbf24;font-weight:700;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>Remind Later</span>';
           } else {
-            statusDot = 'rgba(148,163,184,0.5)';
-            statusLabel = '<span style="color:var(--textMuted);font-weight:600">⏳ Pending</span>';
+            statusDot = 'rgba(148,163,184,0.45)';
+            statusLabel = '<span style="color:var(--textMuted);font-weight:600;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 14,14"/></svg>Pending</span>';
           }
 
           const scope = d.targetAll
             ? '<span style="font-size:10px;background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid rgba(124,58,237,0.3);padding:1px 7px;border-radius:20px;margin-left:6px;font-weight:700">BROADCAST</span>'
             : '';
 
-          // Linkify message preview for backend display too
           const safeMsg = String(d.message||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
           const linkedMsg = safeMsg.replace(/(https?:\/\/[^\s<>"']+)/g,
             url => `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;word-break:break-all">${url}</a>`);
+
+          // Encode message for send-again (base64 to avoid quote issues)
+          const encodedMsg = btoa(unescape(encodeURIComponent(d.message||'')));
+          const msgType = d.type || 'info';
 
           return `<div id="msgrow-${doc.id}" style="padding:11px 13px;border-radius:11px;background:rgba(20,16,44,0.6);border:1px solid rgba(110,90,175,0.22);margin-bottom:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusDot};flex-shrink:0"></span>
-                <span style="font-size:11.5px;color:${col};font-weight:700;text-transform:uppercase">${d.type||'info'}${scope}</span>
+                <span style="font-size:11.5px;color:${col};font-weight:700">${typeLabel}${scope}</span>
               </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
                 <span style="font-size:11px;color:var(--textMuted)">${dateStr}</span>
-                <button onclick="deletePopupMessage('${doc.id}')" title="Delete message" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px;line-height:1;flex-shrink:0">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/></svg>
+                <button onclick="sendAgainPopup('${doc.id}','${msgType}','${encodedMsg}')" title="Send Again" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.1);color:#c084fc;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;display:flex;align-items:center;gap:3px;white-space:nowrap">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>Again
+                </button>
+                <button onclick="deletePopupMessage('${doc.id}')" title="Delete" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M9,6V4h6v2"/></svg>
                 </button>
               </div>
             </div>
@@ -1131,13 +1148,49 @@
       }
     }
 
+    async function sendAgainPopup(originalDocId, msgType, encodedMsg) {
+      const uid = state.selectedUser?.uid;
+      if (!uid) return;
+      try {
+        const message = decodeURIComponent(escape(atob(encodedMsg)));
+        await db.collection('popupMessages').add({
+          targetUid: uid,
+          targetAll: false,
+          message,
+          type: msgType,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          read: false,
+          dismissed: false,
+          sentBy: state.user?.email || 'admin'
+        });
+        showToast('✅ Message resent!', 'success');
+        setTimeout(() => loadMessageStatus(uid), 800);
+      } catch(e) {
+        showToast('❌ Failed: ' + e.message, 'error');
+      }
+    }
+
+    async function deleteAllUserMessages(uid) {
+      if (!confirm('Delete ALL messages for this user? This cannot be undone.')) return;
+      try {
+        const snap = await db.collection('popupMessages').where('targetUid','==',uid).get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        const container = document.getElementById('msgStatusContent');
+        if (container) container.innerHTML = '<span style="color:var(--textMuted);font-size:13px">No messages sent yet</span>';
+        showToast(`✅ Deleted ${snap.size} message${snap.size!==1?'s':''}`, 'success');
+      } catch(e) {
+        showToast('❌ Failed: ' + e.message, 'error');
+      }
+    }
+
     async function deletePopupMessage(docId) {
       if (!confirm('Delete this message?')) return;
       try {
         await db.collection('popupMessages').doc(docId).delete();
         const row = document.getElementById('msgrow-' + docId);
         if (row) row.remove();
-        // If container now empty
         const container = document.getElementById('msgStatusContent');
         if (container && !container.querySelector('[id^="msgrow-"]')) {
           container.innerHTML = '<span style="color:var(--textMuted);font-size:13px">No messages sent yet</span>';
@@ -1687,22 +1740,39 @@
       el.id = 'broadcastAllModal';
       el.className = 'modal-overlay';
       el.innerHTML = `
-        <div class="modal fade-in" style="max-width:460px">
+        <div class="modal fade-in" style="max-width:480px">
           <div class="modal-header" style="background:linear-gradient(135deg,rgba(168,85,247,0.12),rgba(124,58,237,0.08))">
-            <h3 style="font-family:'Orbitron',monospace;color:#c084fc;font-size:15px">📢 Broadcast to All Users</h3>
+            <h3 style="font-family:'Orbitron',monospace;color:#c084fc;font-size:15px;display:flex;align-items:center;gap:8px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+              Broadcast to All Users
+            </h3>
             <button class="modal-close" id="broadcastModalClose">✕</button>
           </div>
           <div class="modal-body">
-            <p style="font-size:13px;color:var(--textMuted);margin-bottom:16px">This message will appear as a popup to <strong style="color:#c084fc">every user</strong> when they next log into GameBill.</p>
-            <select id="broadcastMsgType" style="width:100%;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(110,90,175,0.4);background:var(--bgInput);color:var(--textPrimary);font-size:13px;font-weight:600;outline:none;font-family:'Rajdhani',sans-serif;margin-bottom:10px">
-              <option value="info">ℹ️ Info</option>
-              <option value="success">✅ Success</option>
-              <option value="warning">⚠️ Warning</option>
-              <option value="error">🚨 Alert</option>
-            </select>
+            <p style="font-size:13px;color:var(--textMuted);margin-bottom:14px">This message will appear as a popup to <strong style="color:#c084fc">every user</strong> when they next log into GameBill.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+              <button type="button" class="bcast-type-btn" data-type="info" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(96,165,250,0.5);background:rgba(59,130,246,0.15);color:#60a5fa;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;transition:all 0.2s">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8" stroke-width="3"/><line x1="12" y1="12" x2="12" y2="16"/></svg>Info
+              </button>
+              <button type="button" class="bcast-type-btn" data-type="success" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(52,211,153,0.3);background:rgba(16,185,129,0.08);color:#34d399;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;transition:all 0.2s;opacity:0.55">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>Success
+              </button>
+              <button type="button" class="bcast-type-btn" data-type="warning" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(251,191,36,0.3);background:rgba(245,158,11,0.08);color:#fbbf24;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;transition:all 0.2s;opacity:0.55">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Warning
+              </button>
+              <button type="button" class="bcast-type-btn" data-type="error" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;transition:all 0.2s;opacity:0.55">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Alert
+              </button>
+            </div>
+            <input type="hidden" id="broadcastMsgType" value="info"/>
             <textarea id="broadcastMsgText" placeholder="Type your broadcast message here..." rows="4" style="width:100%;padding:10px 13px;border-radius:10px;border:1px solid rgba(90,75,145,0.4);background:var(--bgInput);color:var(--textPrimary);font-size:14px;font-weight:600;outline:none;resize:vertical;font-family:'Rajdhani',sans-serif;box-sizing:border-box;margin-bottom:14px"></textarea>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-purple" id="broadcastSendBtn" style="font-weight:800;flex:1;justify-content:center;display:flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>Send to All</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-purple" id="broadcastSendBtn" style="font-weight:800;flex:1;min-width:110px;justify-content:center;display:flex;align-items:center;gap:6px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>Send to All
+              </button>
+              <button class="btn btn-red" id="broadcastDeleteAllBtn" style="font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:5px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/></svg>Delete All Broadcasts
+              </button>
               <button class="btn btn-red" id="broadcastCancelBtn" style="font-weight:700;white-space:nowrap">Cancel</button>
             </div>
           </div>
@@ -1713,38 +1783,53 @@
       document.getElementById('broadcastCancelBtn').onclick = () => el.remove();
       el.onclick = (e) => { if (e.target === el) el.remove(); };
 
-      // Broadcast type button toggles
+      // Type button toggles — first one active by default
       el.querySelectorAll('.bcast-type-btn').forEach(btn => {
         btn.onclick = () => {
           el.querySelectorAll('.bcast-type-btn').forEach(b => b.style.opacity = '0.55');
           btn.style.opacity = '1';
-          const hidden = el.querySelector('#broadcastMsgType');
-          if (hidden) hidden.value = btn.dataset.type;
+          el.querySelector('#broadcastMsgType').value = btn.dataset.type;
         };
       });
 
       document.getElementById('broadcastSendBtn').onclick = async () => {
-        const msgText = (document.getElementById('broadcastMsgText')?.value || '').trim();
-        const msgType = document.getElementById('broadcastMsgType')?.value || 'info';
+        const msgText = (el.querySelector('#broadcastMsgText')?.value || '').trim();
+        const msgType = el.querySelector('#broadcastMsgType')?.value || 'info';
         if (!msgText) { showToast('⚠️ Please enter a message', 'error'); return; }
         const btn = document.getElementById('broadcastSendBtn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+        btn.disabled = true; btn.textContent = 'Sending...';
         try {
           await db.collection('popupMessages').add({
-            targetUid: null,
-            targetAll: true,
-            message: msgText,
-            type: msgType,
+            targetUid: null, targetAll: true,
+            message: msgText, type: msgType,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            read: false,
-            dismissed: false,
+            read: false, dismissed: false,
             sentBy: state.user?.email || 'admin'
           });
           el.remove();
           showToast('✅ Broadcast sent to all users!', 'success');
         } catch(e) {
           showToast('❌ Failed: ' + e.message, 'error');
-          if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>Send to All Users'; }
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>Send to All';
+        }
+      };
+
+      document.getElementById('broadcastDeleteAllBtn').onclick = async () => {
+        if (!confirm('Delete ALL broadcast messages sent to all users? This cannot be undone.')) return;
+        const btn = document.getElementById('broadcastDeleteAllBtn');
+        btn.disabled = true; btn.textContent = 'Deleting...';
+        try {
+          const snap = await db.collection('popupMessages').where('targetAll','==',true).get();
+          const batch = db.batch();
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          el.remove();
+          showToast(`✅ Deleted ${snap.size} broadcast message${snap.size !== 1 ? 's' : ''}`, 'success');
+        } catch(e) {
+          showToast('❌ Failed: ' + e.message, 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/></svg>Delete All Broadcasts';
         }
       };
     }
