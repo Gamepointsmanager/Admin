@@ -752,6 +752,7 @@
       }
       // Stat chip filters (both desktop and mobile)
       document.querySelectorAll('.stat-chip').forEach(chip => {
+        if (!chip.dataset.filter) return; // skip chips without a filter (e.g. subRevChip)
         chip.onclick = () => {
           state.activeFilter = chip.dataset.filter;
           filterUsers();
@@ -1605,14 +1606,24 @@
       if (existing) existing.remove();
 
       const existingCost = u.subscriptionCost || '';
+
+      // Helper: format a Date as YYYY-MM-DD for input[type=date]
+      const toDateInput = (d) => d.toISOString().split('T')[0];
+      const today = toDateInput(new Date());
+
       const existingStart = u.subPeriodStart ? (() => {
         const d = u.subPeriodStart.toDate ? u.subPeriodStart.toDate() : new Date(u.subPeriodStart);
-        return d.toISOString().split('T')[0];
-      })() : '';
+        return toDateInput(d);
+      })() : today; // default: today
+
       const existingEnd = u.subPeriodEnd ? (() => {
         const d = u.subPeriodEnd.toDate ? u.subPeriodEnd.toDate() : new Date(u.subPeriodEnd);
-        return d.toISOString().split('T')[0];
-      })() : '';
+        return toDateInput(d);
+      })() : (u.expiryDate ? (() => {
+        // default: user's access expiry date
+        const d = u.expiryDate.toDate ? u.expiryDate.toDate() : new Date(u.expiryDate);
+        return toDateInput(d);
+      })() : today); // fallback: today
 
       const el = document.createElement('div');
       el.id = 'setCostModal';
