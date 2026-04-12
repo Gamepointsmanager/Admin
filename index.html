@@ -421,11 +421,12 @@
       searchQuery: '',
       selectedUser: null,
       modalOpen: false,
-      activeFilter: 'all', // all, active, expired, disabled, noAccess
-      displayCount: 20, // lazy loading batch size
-      subRevPage: false,        // full-page subscription revenue view
+      activeFilter: 'all',
+      displayCount: 20,
+      subRevPage: false,
       subRevFrom: '',
       subRevTo: '',
+      msgCounts: {}, // uid → { total, unread } — loaded once per session
     };
     
     function openUserDetail(uid) {
@@ -436,6 +437,28 @@
       state.view = 'dashboard';
       state.selectedUser = null;
       render();
+    }
+
+    // Load per-user message counts for the indicator icons in the user list
+    async function loadMsgCounts() {
+      try {
+        const snap = await db.collection('popupMessages').where('targetAll','==',false).get();
+        const counts = {};
+        snap.docs.forEach(doc => {
+          const d = doc.data();
+          const uid = d.targetUid;
+          if (!uid) return;
+          if (!counts[uid]) counts[uid] = { total: 0, unread: 0 };
+          counts[uid].total++;
+          if (!d.read) counts[uid].unread++;
+        });
+        state.msgCounts = counts;
+        // Re-render user list in place if on dashboard
+        if (state.view === 'dashboard') {
+          const ul = document.getElementById('userList');
+          if (ul) render(); // lightweight — state already set
+        }
+      } catch(e) { /* non-critical, silent */ }
     }
 
     // ============================================================
@@ -662,7 +685,7 @@
           </div>
 
           <!-- Navigate to full revenue page -->
-          <div class="stat-chip" id="subRevChip" style="cursor:pointer">
+          <div class="stat-chip sub-rev-chip" style="cursor:pointer;border:1.5px solid rgba(52,211,153,0.45);background:rgba(16,185,129,0.09);border-radius:10px;transition:all 0.2s" onmouseover="this.style.background='rgba(16,185,129,0.16)'" onmouseout="this.style.background='rgba(16,185,129,0.09)'">
             <div style="display:flex;align-items:center;gap:8px;width:100%">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
               <div style="flex:1">
@@ -693,16 +716,30 @@
           ? `<img src="${u.photoURL}" alt="" referrerpolicy="no-referrer"/>`
           : initial;
 
+        const mc = state.msgCounts[u.uid];
+        const msgIndicator = mc && mc.total > 0 ? `
+          <div title="${mc.unread} unread / ${mc.total} total message${mc.total!==1?'s':''}" style="display:inline-flex;align-items:center;gap:3px;margin-top:2px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${mc.unread > 0 ? '#c084fc' : 'var(--textMuted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            ${mc.unread > 0 ? `<span style="font-size:10px;color:#c084fc;font-weight:700">${mc.unread}</span>` : `<span style="font-size:10px;color:var(--textMuted);font-weight:600">${mc.total}</span>`}
+          </div>` : '';
+
         return `<div class="user-item" data-uid="${u.uid}">
           <div class="user-avatar">${avatar}</div>
           <div class="user-info">
             <div class="user-name">${u.displayName || 'No Name'}</div>
             <div class="user-email">${u.email || 'No Email'}</div>
             ${u.gbUsername ? '<div style="font-size:11px;color:#22d3ee;font-weight:600;margin-top:1px">@' + u.gbUsername + '</div>' : ''}
+            ${msgIndicator}
           </div>
           <div class="user-item-status">
-            ${daysLeft !== null && daysLeft > 0 ? `<div style="font-family:'Orbitron',monospace;font-size:13px;color:${status.color};margin-bottom:2px;white-space:nowrap">${daysLeft}d</div>` : ''}
-            <span class="user-status ${status.cls}">${status.label}</span>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 10px;border-radius:9px;background:rgba(20,16,44,0.7);border:1px solid rgba(${status.cls === 'status-active' ? '52,211,153,0.3' : status.cls === 'status-expiring' ? '245,158,11,0.3' : status.cls === 'status-expired' ? '239,68,68,0.3' : '110,90,175,0.25'});min-width:48px;text-align:center;gap:3px">
+              ${daysLeft !== null && daysLeft > 0
+                ? `<div style="font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:${status.color};line-height:1">${daysLeft > 36000 ? '∞' : daysLeft}</div>
+                   <div style="font-size:8px;color:var(--textMuted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1">${daysLeft > 36000 ? 'unlim' : 'days'}</div>`
+                : `<div style="font-size:8px;color:var(--textMuted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1;margin-bottom:2px">—</div>`
+              }
+              <span class="user-status ${status.cls}" style="font-size:9px;padding:2px 5px;margin-top:1px">${status.label}</span>
+            </div>
           </div>
         </div>`;
       }).join('');
@@ -783,12 +820,10 @@
       // Broadcast to all
       const broadcastAllBtn = document.getElementById('broadcastAllBtn');
       if (broadcastAllBtn) broadcastAllBtn.onclick = () => showBroadcastAllModal();
-      // Subscription Revenue chip → navigate to full page
-      const subRevChip = document.getElementById('subRevChip');
-      if (subRevChip) subRevChip.onclick = () => {
-        state.view = 'subRevPage';
-        render();
-      };
+      // Subscription Revenue chip → navigate to full page (use class, not ID, since sidebar renders twice)
+      document.querySelectorAll('.sub-rev-chip').forEach(chip => {
+        chip.onclick = () => { state.view = 'subRevPage'; render(); };
+      });
       // Sub-rev date filters
       // Sub-rev set cost buttons
       document.querySelectorAll('.set-cost-btn').forEach(btn => {
@@ -858,10 +893,10 @@
               <div style="font-size:13px;color:var(--textSecondary);font-weight:600;margin-bottom:4px">${u.email || ''}</div>
               ${u.gbUsername ? '<div style="font-size:14px;color:#22d3ee;font-weight:700">@' + u.gbUsername + '</div>' : '<div style="font-size:12px;color:#f87171;font-weight:600">No username set</div>'}
             </div>
-            <div style="text-align:center;padding:14px 20px;border-radius:12px;background:rgba(20,16,40,0.6);border:1.5px solid rgba(130,105,215,0.3);min-width:100px">
-              <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:${status.color}">${isUnlimited ? '∞' : (daysLeft !== null ? daysLeft : '0')}</div>
-              <div style="font-size:10px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:2px">${isUnlimited ? 'Unlimited' : 'Days Left'}</div>
-              <span class="user-status ${status.cls}" style="margin-top:6px;display:inline-block">${status.label}</span>
+            <div style="text-align:center;padding:10px 14px;border-radius:10px;background:rgba(20,16,40,0.6);border:1.5px solid rgba(130,105,215,0.3);min-width:76px;flex-shrink:0">
+              <div style="font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:${status.color};line-height:1">${isUnlimited ? '∞' : (daysLeft !== null ? daysLeft : '0')}</div>
+              <div style="font-size:9px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:3px;margin-bottom:5px">${isUnlimited ? 'Unlimited' : 'Days Left'}</div>
+              <span class="user-status ${status.cls}" style="font-size:10px;padding:2px 8px">${status.label}</span>
             </div>
           </div>
         </div>
@@ -1882,6 +1917,7 @@
         listenUsers();
         state.view = 'dashboard';
         render();
+        loadMsgCounts(); // load per-user message counts for list indicators
       } else {
         if (unsubUsers) { unsubUsers(); unsubUsers = null; }
         state.user = null;
