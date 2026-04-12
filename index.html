@@ -21,7 +21,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0d0d1a;
+      --bg: #13132a;
       --bgCard: rgba(22,18,42,0.82);
       --bgInput: rgba(28,22,50,0.88);
       --bgHover: rgba(38,32,62,0.88);
@@ -45,7 +45,7 @@
     }
 
     body {
-      background: #0d0d1a;
+      background: #13132a;
       color: var(--textPrimary);
       font-family: 'Rajdhani', 'Exo 2', sans-serif;
       font-weight: 500;
@@ -439,6 +439,28 @@
       render();
     }
 
+    // Shared — binds hamburger on every page that uses renderHeader()
+    function bindMobileMenu() {
+      const menuBtn = document.getElementById('mobileMenuBtn');
+      if (menuBtn) menuBtn.onclick = () => {
+        document.getElementById('mobileSidebar')?.classList.add('open');
+        document.getElementById('mobileSidebarOverlay')?.classList.add('open');
+      };
+      const overlay = document.getElementById('mobileSidebarOverlay');
+      if (overlay) overlay.onclick = () => {
+        document.getElementById('mobileSidebar')?.classList.remove('open');
+        overlay.classList.remove('open');
+      };
+      // Wire sub-rev chip inside mobile sidebar too
+      document.querySelectorAll('.sub-rev-chip').forEach(chip => {
+        chip.onclick = () => {
+          document.getElementById('mobileSidebar')?.classList.remove('open');
+          document.getElementById('mobileSidebarOverlay')?.classList.remove('open');
+          state.view = 'subRevPage'; render();
+        };
+      });
+    }
+
     // Load per-user message counts for the indicator icons in the user list
     async function loadMsgCounts() {
       try {
@@ -453,12 +475,29 @@
           if (!d.read) counts[uid].unread++;
         });
         state.msgCounts = counts;
-        // Re-render user list in place if on dashboard
-        if (state.view === 'dashboard') {
-          const ul = document.getElementById('userList');
-          if (ul) render(); // lightweight — state already set
-        }
-      } catch(e) { /* non-critical, silent */ }
+        // Patch icons directly into existing user-item cards — no full re-render needed
+        document.querySelectorAll('.user-item[data-uid]').forEach(item => {
+          const uid = item.dataset.uid;
+          const mc = counts[uid];
+          // Find or create the msg indicator slot
+          let slot = item.querySelector('.msg-indicator-slot');
+          if (!slot) {
+            const infoDiv = item.querySelector('.user-info');
+            if (!infoDiv) return;
+            slot = document.createElement('div');
+            slot.className = 'msg-indicator-slot';
+            infoDiv.appendChild(slot);
+          }
+          if (mc && mc.total > 0) {
+            slot.innerHTML = `<div title="${mc.unread} unread / ${mc.total} total message${mc.total!==1?'s':''}" style="display:inline-flex;align-items:center;gap:3px;margin-top:2px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${mc.unread > 0 ? '#c084fc' : 'var(--textMuted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              ${mc.unread > 0 ? `<span style="font-size:10px;color:#c084fc;font-weight:700">${mc.unread} unread</span>` : `<span style="font-size:10px;color:var(--textMuted);font-weight:600">${mc.total} sent</span>`}
+            </div>`;
+          } else {
+            slot.innerHTML = '';
+          }
+        });
+      } catch(e) { /* non-critical */ }
     }
 
     // ============================================================
@@ -629,7 +668,14 @@
     // ============================================================
     function renderHeader() {
       const logoB64 = document.querySelector('.login-logo img')?.src || '';
-      return `<div class="header">
+      return `
+      <!-- Mobile sidebar overlay + drawer — present on every page -->
+      <div class="mobile-sidebar-overlay" id="mobileSidebarOverlay"></div>
+      <div class="mobile-sidebar" id="mobileSidebar">
+        <div style="font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--purpleLight);margin-bottom:16px;letter-spacing:1px">DASHBOARD</div>
+        <div id="mobileSidebarContent">${renderSidebar()}</div>
+      </div>
+      <div class="header">
         <div style="display:flex;align-items:center;gap:10px">
           <button class="mobile-hamburger" id="mobileMenuBtn" style="background:none;border:none;cursor:pointer;padding:5px">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--textSecondary)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
@@ -716,41 +762,22 @@
           ? `<img src="${u.photoURL}" alt="" referrerpolicy="no-referrer"/>`
           : initial;
 
-        const mc = state.msgCounts[u.uid];
-        const msgIndicator = mc && mc.total > 0 ? `
-          <div title="${mc.unread} unread / ${mc.total} total message${mc.total!==1?'s':''}" style="display:inline-flex;align-items:center;gap:3px;margin-top:2px">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${mc.unread > 0 ? '#c084fc' : 'var(--textMuted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            ${mc.unread > 0 ? `<span style="font-size:10px;color:#c084fc;font-weight:700">${mc.unread}</span>` : `<span style="font-size:10px;color:var(--textMuted);font-weight:600">${mc.total}</span>`}
-          </div>` : '';
-
         return `<div class="user-item" data-uid="${u.uid}">
           <div class="user-avatar">${avatar}</div>
           <div class="user-info">
             <div class="user-name">${u.displayName || 'No Name'}</div>
             <div class="user-email">${u.email || 'No Email'}</div>
             ${u.gbUsername ? '<div style="font-size:11px;color:#22d3ee;font-weight:600;margin-top:1px">@' + u.gbUsername + '</div>' : ''}
-            ${msgIndicator}
+            <div class="msg-indicator-slot"></div>
           </div>
           <div class="user-item-status">
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 10px;border-radius:9px;background:rgba(20,16,44,0.7);border:1px solid rgba(${status.cls === 'status-active' ? '52,211,153,0.3' : status.cls === 'status-expiring' ? '245,158,11,0.3' : status.cls === 'status-expired' ? '239,68,68,0.3' : '110,90,175,0.25'});min-width:48px;text-align:center;gap:3px">
-              ${daysLeft !== null && daysLeft > 0
-                ? `<div style="font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:${status.color};line-height:1">${daysLeft > 36000 ? '∞' : daysLeft}</div>
-                   <div style="font-size:8px;color:var(--textMuted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1">${daysLeft > 36000 ? 'unlim' : 'days'}</div>`
-                : `<div style="font-size:8px;color:var(--textMuted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1;margin-bottom:2px">—</div>`
-              }
-              <span class="user-status ${status.cls}" style="font-size:9px;padding:2px 5px;margin-top:1px">${status.label}</span>
-            </div>
+            ${daysLeft !== null && daysLeft > 0 ? `<div style="font-family:'Orbitron',monospace;font-size:13px;color:${status.color};margin-bottom:2px;white-space:nowrap">${daysLeft > 36000 ? '∞' : daysLeft + 'd'}</div>` : ''}
+            <span class="user-status ${status.cls}">${status.label}</span>
           </div>
         </div>`;
       }).join('');
 
       return `
-      <!-- Mobile sidebar overlay -->
-      <div class="mobile-sidebar-overlay" id="mobileSidebarOverlay"></div>
-      <div class="mobile-sidebar" id="mobileSidebar">
-        <div style="font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--purpleLight);margin-bottom:16px;letter-spacing:1px">DASHBOARD</div>
-        <div id="mobileSidebarContent">${renderSidebar()}</div>
-      </div>
       <div class="admin-layout fade-in">
         <div class="admin-sidebar" id="desktopSidebar">
           <div style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--purpleLight);margin-bottom:16px;letter-spacing:1px">DASHBOARD</div>
@@ -776,6 +803,7 @@
     }
 
     function bindDashboard() {
+      bindMobileMenu();
       // Search
       const search = $('#searchInput');
       if (search) {
@@ -789,49 +817,26 @@
       }
       // Stat chip filters (both desktop and mobile)
       document.querySelectorAll('.stat-chip').forEach(chip => {
-        if (!chip.dataset.filter) return; // skip chips without a filter (e.g. subRevChip)
+        if (!chip.dataset.filter) return;
         chip.onclick = () => {
           state.activeFilter = chip.dataset.filter;
           filterUsers();
-          // Close mobile sidebar if open
-          const ms = document.getElementById('mobileSidebar');
-          const mo = document.getElementById('mobileSidebarOverlay');
-          if (ms) ms.classList.remove('open');
-          if (mo) mo.classList.remove('open');
+          document.getElementById('mobileSidebar')?.classList.remove('open');
+          document.getElementById('mobileSidebarOverlay')?.classList.remove('open');
           render();
         };
       });
-      // Mobile hamburger
-      const menuBtn = document.getElementById('mobileMenuBtn');
-      if (menuBtn) menuBtn.onclick = () => {
-        const ms = document.getElementById('mobileSidebar');
-        const mo = document.getElementById('mobileSidebarOverlay');
-        if (ms) ms.classList.add('open');
-        if (mo) mo.classList.add('open');
-      };
-      const overlay = document.getElementById('mobileSidebarOverlay');
-      if (overlay) overlay.onclick = () => {
-        document.getElementById('mobileSidebar')?.classList.remove('open');
-        overlay.classList.remove('open');
-      };
       // Lazy load more
       const loadMore = document.getElementById('loadMoreBtn');
       if (loadMore) loadMore.onclick = () => { state.displayCount += 20; render(); };
       // Broadcast to all
       const broadcastAllBtn = document.getElementById('broadcastAllBtn');
       if (broadcastAllBtn) broadcastAllBtn.onclick = () => showBroadcastAllModal();
-      // Subscription Revenue chip → navigate to full page (use class, not ID, since sidebar renders twice)
-      document.querySelectorAll('.sub-rev-chip').forEach(chip => {
-        chip.onclick = () => { state.view = 'subRevPage'; render(); };
-      });
-      // Sub-rev date filters
       // Sub-rev set cost buttons
       document.querySelectorAll('.set-cost-btn').forEach(btn => {
         btn.onclick = (e) => {
           e.stopPropagation();
-          const uid = btn.dataset.uid;
-          const name = btn.dataset.name;
-          showSetCostModal(uid, name);
+          showSetCostModal(btn.dataset.uid, btn.dataset.name);
         };
       });
       // User clicks
@@ -851,8 +856,8 @@
       const daysLeft = getDaysLeft(u);
       const initial = (u.displayName || u.email || '?')[0].toUpperCase();
       const avatar = u.photoURL
-        ? `<img src="${u.photoURL}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2.5px solid rgba(124,58,237,0.45)" referrerpolicy="no-referrer"/>`
-        : `<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#22d3ee);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;border:2.5px solid rgba(124,58,237,0.45);flex-shrink:0">${initial}</div>`;
+        ? `<img src="${u.photoURL}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(124,58,237,0.45)" referrerpolicy="no-referrer"/>`
+        : `<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#22d3ee);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;border:2px solid rgba(124,58,237,0.45);flex-shrink:0">${initial}</div>`;
 
       const fmtTs = (ts) => {
         if (!ts) return '<span style="color:#f87171">Not available</span>';
@@ -886,17 +891,17 @@
 
         <!-- Profile Card -->
         <div class="detail-section" style="background:linear-gradient(135deg,rgba(124,58,237,0.1),rgba(14,11,28,0.95));border-color:rgba(124,58,237,0.35)">
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            ${avatar}
-            <div style="flex:1;min-width:0">
-              <div style="font-size:20px;font-weight:800;color:var(--textPrimary);margin-bottom:2px">${u.displayName || 'No Name'}</div>
-              <div style="font-size:13px;color:var(--textSecondary);font-weight:600;margin-bottom:4px">${u.email || ''}</div>
-              ${u.gbUsername ? '<div style="font-size:14px;color:#22d3ee;font-weight:700">@' + u.gbUsername + '</div>' : '<div style="font-size:12px;color:#f87171;font-weight:600">No username set</div>'}
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:nowrap">
+            <div style="flex-shrink:0">${avatar}</div>
+            <div style="flex:1;min-width:0;overflow:hidden">
+              <div style="font-size:18px;font-weight:800;color:var(--textPrimary);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.displayName || 'No Name'}</div>
+              <div style="font-size:12px;color:var(--textSecondary);font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email || ''}</div>
+              ${u.gbUsername ? '<div style="font-size:13px;color:#22d3ee;font-weight:700">@' + u.gbUsername + '</div>' : '<div style="font-size:11px;color:#f87171;font-weight:600">No username set</div>'}
             </div>
-            <div style="text-align:center;padding:10px 14px;border-radius:10px;background:rgba(20,16,40,0.6);border:1.5px solid rgba(130,105,215,0.3);min-width:76px;flex-shrink:0">
+            <div style="flex-shrink:0;text-align:center;padding:10px 12px;border-radius:10px;background:rgba(20,16,40,0.6);border:1.5px solid rgba(130,105,215,0.3);min-width:70px">
               <div style="font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:${status.color};line-height:1">${isUnlimited ? '∞' : (daysLeft !== null ? daysLeft : '0')}</div>
               <div style="font-size:9px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:3px;margin-bottom:5px">${isUnlimited ? 'Unlimited' : 'Days Left'}</div>
-              <span class="user-status ${status.cls}" style="font-size:10px;padding:2px 8px">${status.label}</span>
+              <span class="user-status ${status.cls}" style="font-size:9px;padding:2px 7px;display:inline-block">${status.label}</span>
             </div>
           </div>
         </div>
@@ -1010,6 +1015,7 @@
     }
 
     function bindUserDetailPage() {
+      bindMobileMenu();
       const backBtn = document.getElementById('backBtn');
       if (backBtn) backBtn.onclick = closeUserDetail;
 
@@ -1613,6 +1619,7 @@
     }
 
     function bindSubRevPage() {
+      bindMobileMenu();
       const backBtn = document.getElementById('subRevBackBtn');
       if (backBtn) backBtn.onclick = () => { state.view = 'dashboard'; render(); };
 
