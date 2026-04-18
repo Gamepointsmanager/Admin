@@ -1,7 +1,7 @@
 {
-  "name": "GameBill Admin",
-  "short_name": "GB Admin",
-  "description": "GameBill Access Manager",
+  "name": "SweepAdmin Access",
+  "short_name": "SA Access",
+  "description": " SweepAdmin Access Manager",
   "start_url": "/Admin/",
   "scope": "/Admin/",
   "id": "/Admin/",
