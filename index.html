@@ -407,7 +407,7 @@
       lastLogin:'last_login',createdAt:'created_at',updatedAt:'updated_at',
       subPeriodStart:'sub_period_start',subPeriodEnd:'sub_period_end',
       subscriptionCost:'subscription_cost',targetUid:'target_uid',
-      targetAll:'target_all',dismissedAt:'dismissed_at',employeeId:'employee_id',
+      targetAll:'target_all',dismissedAt:'dismissed_at',sentBy:'sent_by',employeeId:'employee_id',
       ownerUid:'owner_uid',
     };
     const _S2F = Object.fromEntries(Object.entries(_F2S).map(([k,v])=>[v,k]));
@@ -2036,6 +2036,11 @@
     //   // "Got it" → db.collection('popupMessages').doc(docId).update({ read: true })
     //   // "Remind later" → db.collection('popupMessages').doc(docId).update({ dismissed: true })
     // }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[SW] registered:', reg.scope))
+        .catch(e => console.log('[SW] failed:', e.message));
+    }
   </script>
 </body>
 </html>
