@@ -528,8 +528,17 @@
       async setPersistence(){},
       async signOut(){_lastAuthUid=null;return _supabase.auth.signOut();},
       onAuthStateChanged(cb){
+        let _fired=false;
+        _supabase.auth.getSession().then(({data:{session}})=>{
+          if(_fired)return;
+          _fired=true;
+          const user=session?.user??null;
+          _lastAuthUid=user?.id??null;
+          cb(_sbUser(user));
+        });
         const{data:{subscription}}=_supabase.auth.onAuthStateChange((event,session)=>{
           const user=session?.user??null,uid=user?.id??null;
+          if(event==='INITIAL_SESSION'){if(_fired)return;_fired=true;_lastAuthUid=uid;cb(_sbUser(user));return;}
           if(uid===_lastAuthUid&&event!=='SIGNED_OUT')return;
           _lastAuthUid=uid;
           cb(_sbUser(user));
@@ -2028,7 +2037,16 @@
     // ============================================================
     // Supabase handles session persistence automatically
 
+    const _authTimeout = setTimeout(() => {
+      if (state.view === 'loading') {
+        console.warn('[Auth] Timeout — forcing login');
+        state.view = 'login';
+        render();
+      }
+    }, 10000);
+
     auth.onAuthStateChanged(async (user) => {
+      clearTimeout(_authTimeout);
       if (user) {
         state.user = { uid: user.uid||user.id, id: user.id||user.uid, email: user.email };
 
