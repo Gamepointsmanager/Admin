@@ -12,10 +12,8 @@
   <link rel="icon" href="icon-192.png" type="image/png" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -392,19 +390,166 @@
     // ============================================================
     // FIREBASE INIT
     // ============================================================
-    const firebaseConfig = {
-      apiKey: "AIzaSyDjrOg8Q0sIXI6Jo5f4DT2x-kv9rkbaMx0",
-      authDomain: "auth.sweepadmin.com",
-      projectId: "sweepadministrator",
-      storageBucket: "sweepadministrator.firebasestorage.app",
-      messagingSenderId: "909535669253",
-      appId: "1:909535669253:web:8389b6274f269178c3806c",
-      measurementId: "G-0LMKKJRY4X"
+    // ── Supabase init ──────────────────────────────────────────────
+    const _supabase = window.supabase.createClient(
+      'https://kzchxmulktygoqhiwpff.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg'
+    );
+
+    // ── db shim: wraps Supabase so db.collection/doc/onSnapshot work ──
+    const _serverTs = () => new Date().toISOString();
+    window.firebase = {
+      firestore: {
+        FieldValue: {
+          serverTimestamp: _serverTs,
+          delete: () => undefined,
+        },
+        Timestamp: {
+          fromDate: (d) => ({ toDate: () => d, toMillis: () => d.getTime(), _isTs: true }),
+          fromMillis: (ms) => ({ toDate: () => new Date(ms), toMillis: () => ms, _isTs: true }),
+        },
+      },
+      auth: { Auth: { Persistence: { LOCAL: 'local' } } },
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    function _sbConvert(obj) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+      const out = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === undefined) continue; // FieldValue.delete()
+        out[k] = (v && typeof v === 'object' && v._isTs) ? v.toDate().toISOString()
+                 : typeof v === 'function' ? v()
+                 : v;
+      }
+      return out;
+    }
+
+    class _SBRef {
+      constructor(table, id) { this._table = table; this._id = id || null; this._wheres = []; this._ord = null; this._asc = true; this._lim = null; }
+      where(f, op, v) { const c = this._clone(); const m = {'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'}; c._wheres.push({f, op: m[op]||'eq', v}); return c; }
+      orderBy(f, dir) { const c = this._clone(); c._ord = f; c._asc = dir !== 'desc'; return c; }
+      limit(n) { const c = this._clone(); c._lim = n; return c; }
+      doc(id) { const c = this._clone(); c._id = id; return c; }
+      collection(sub) { return new _SBRef(sub, null); }
+      _clone() { return Object.assign(Object.create(_SBRef.prototype), this, {_wheres:[...this._wheres]}); }
+      _q(sel) {
+        let q = _supabase.from(this._table).select(sel||'*');
+        for (const w of this._wheres) q = q[w.op](w.f, w.v);
+        if (this._ord) q = q.order(this._ord, {ascending: this._asc});
+        if (this._lim) q = q.limit(this._lim);
+        return q;
+      }
+      async get() {
+        if (this._id) {
+          const {data, error} = await _supabase.from(this._table).select('*').eq('id', this._id).single();
+          if (error && error.code !== 'PGRST116') console.warn('[db.get]', error);
+          const row = data ? {...data, _id: data.id} : null;
+          return { exists: !!data, data: () => row, id: this._id };
+        }
+        const {data, error} = await this._q('*');
+        if (error) console.warn('[db.collection.get]', error);
+        const docs = (data||[]).map(r => ({id:r.id, exists:true, data:()=>({...r,_id:r.id})}));
+        return { docs, empty: !docs.length };
+      }
+      async set(payload, opts) {
+        const d = _sbConvert(payload);
+        if (this._id) {
+          const {error} = await _supabase.from(this._table).upsert({id: this._id, ...d});
+          if (error) throw error;
+        } else {
+          const {data, error} = await _supabase.from(this._table).insert(d).select().single();
+          if (error) throw error;
+          this._id = data.id;
+        }
+      }
+      async update(payload) {
+        if (!this._id) throw new Error('[db.update] no id');
+        const d = _sbConvert(payload);
+        // Remove undefined values (FieldValue.delete())
+        const clean = Object.fromEntries(Object.entries(d).filter(([,v])=>v!==undefined));
+        const {error} = await _supabase.from(this._table).update(clean).eq('id', this._id);
+        if (error) throw error;
+      }
+      async delete() {
+        if (this._id) {
+          const {error} = await _supabase.from(this._table).delete().eq('id', this._id);
+          if (error) throw error;
+        }
+      }
+      async add(payload) {
+        const d = _sbConvert(payload);
+        const {data, error} = await _supabase.from(this._table).insert(d).select().single();
+        if (error) throw error;
+        return { id: data.id };
+      }
+      onSnapshot(cb, errCb) {
+        const self = this;
+        this.get().then(snap => cb(snap)).catch(e => errCb && errCb(e));
+        const ch = _supabase.channel('admin_'+this._table+'_'+Date.now())
+          .on('postgres_changes', {event:'*', schema:'public', table: this._table}, async () => {
+            const fresh = await self.get();
+            cb(fresh);
+          }).subscribe();
+        return () => _supabase.removeChannel(ch);
+      }
+    }
+
+    const _PATH_MAP = {
+      'userAccess':    'user_access',
+      'gbUsernames':   'gb_usernames',
+      'popupMessages': 'popup_messages',
+      'employeeLinks': 'employee_links',
+      'employeeUids':  'employee_uids',
+      'organizations': 'organizations',
+    };
+    function _toRef(path) {
+      const parts = path.split('/').filter(Boolean);
+      const col = parts[0], id = parts[1]||null;
+      return new _SBRef(_PATH_MAP[col]||col, id);
+    }
+    const db = {
+      collection: (p) => _toRef(p),
+      doc: (p) => _toRef(p),
+    };
+
+    // Auth shim
+    const auth = {
+      async signInWithPopup() {
+        const {error} = await _supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.origin + window.location.pathname }
+        });
+        if (error) throw error;
+      },
+      async signInWithRedirect() {
+        const {error} = await _supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.origin + window.location.pathname }
+        });
+        if (error) throw error;
+      },
+      async getRedirectResult() { return null; },
+      async setPersistence() {},
+      async signOut() { return _supabase.auth.signOut(); },
+      onAuthStateChanged(cb) {
+        _supabase.auth.getSession().then(({data:{session}}) => {
+          cb(session ? _toFbUser(session.user) : null);
+        });
+        const {data:{subscription}} = _supabase.auth.onAuthStateChange((_e, session) => {
+          cb(session ? _toFbUser(session.user) : null);
+        });
+        return () => subscription.unsubscribe();
+      },
+    };
+    function _toFbUser(u) {
+      if (!u) return null;
+      return {
+        uid: u.id, id: u.id,
+        email: u.email,
+        displayName: u.user_metadata?.full_name || u.user_metadata?.name || '',
+        photoURL: u.user_metadata?.avatar_url || '',
+      };
+    }
 
     const ADMIN_EMAIL = 'service@sweepadmin.com';
     const $ = (s) => document.querySelector(s);
@@ -626,18 +771,7 @@
         btn.innerHTML = '<span style="animation:pulse 1s infinite">Signing in...</span>';
         btn.disabled = true;
         try {
-          const provider = new firebase.auth.GoogleAuthProvider();
-          try {
-            await auth.signInWithPopup(provider);
-          } catch (popupErr) {
-            if (popupErr.code === 'auth/popup-blocked' ||
-                popupErr.code === 'auth/cancelled-popup-request' ||
-                popupErr.code === 'auth/operation-not-supported-in-this-environment') {
-              await auth.signInWithRedirect(provider);
-            } else {
-              throw popupErr;
-            }
-          }
+          await auth.signInWithPopup();
         } catch(e) {
           const err = $('#loginError');
           err.classList.remove('hidden');
@@ -658,7 +792,7 @@
           <h2 style="font-family:'Orbitron',monospace;font-size:18px;color:var(--red);margin-bottom:12px">ACCESS DENIED</h2>
           <p style="color:var(--textMuted);font-size:14px;margin-bottom:24px">This panel is restricted to the admin account only.</p>
           <p style="color:var(--textMuted);font-size:12px;margin-bottom:24px">Signed in as: ${state.user?.email || ''}</p>
-          <button onclick="firebase.auth().signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
+          <button onclick="auth.signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
         </div>
       </div>`;
     }
@@ -745,7 +879,7 @@
           <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--glassBorder)">
             <div style="font-size:10px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px">Admin</div>
             <div style="font-size:12px;color:var(--textSecondary);line-height:1.8;margin-bottom:12px">${state.user?.email || ''}</div>
-            <button onclick="firebase.auth().signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+            <button onclick="auth.signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
           </div>
         </div>`;
     }
@@ -1038,10 +1172,10 @@
           const trialStart = new Date();
           const newExpiry = new Date(Date.now() + 3*24*60*60*1000);
           await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
+            expiryDate: window.firebase.firestore.Timestamp.fromDate(newExpiry),
             isDisabled: false,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(trialStart),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
+            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(trialStart),
+            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(newExpiry),
           });
           showToast('🎁 Free trial activated (3 days)', 'success');
           const updated = state.users.find(x=>x.uid===u.uid); if (updated) state.selectedUser=updated;
@@ -1056,10 +1190,10 @@
           const unlimStart = new Date();
           const newExpiry = new Date(Date.now() + 100*365*24*60*60*1000);
           await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
+            expiryDate: window.firebase.firestore.Timestamp.fromDate(newExpiry),
             isDisabled: false,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(unlimStart),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
+            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(unlimStart),
+            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(newExpiry),
           });
           showToast('♾️ Unlimited access granted','success');
           closeUserDetail();
@@ -1200,7 +1334,7 @@
           targetAll: false,
           message,
           type: msgType,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt: _serverTs(),
           read: false,
           dismissed: false,
           sentBy: state.user?.email || 'admin'
@@ -1267,11 +1401,11 @@
         const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 
         // Auto-set subscription period to match the access period
-        const startTs = firebase.firestore.Timestamp.fromDate(base);
-        const endTs   = firebase.firestore.Timestamp.fromDate(newExpiry);
+        const startTs = window.firebase.firestore.Timestamp.fromDate(base);
+        const endTs   = window.firebase.firestore.Timestamp.fromDate(newExpiry);
 
         await db.collection('userAccess').doc(u.uid).update({
-          expiryDate:     firebase.firestore.Timestamp.fromDate(newExpiry),
+          expiryDate:     window.firebase.firestore.Timestamp.fromDate(newExpiry),
           isDisabled:     false,
           subPeriodStart: startTs,
           subPeriodEnd:   endTs,
@@ -1730,8 +1864,8 @@
         try {
           await db.collection('userAccess').doc(uid).update({
             subscriptionCost: cost,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(new Date(startVal + 'T00:00:00')),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(new Date(endVal   + 'T23:59:59')),
+            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(new Date(startVal + 'T00:00:00')),
+            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(new Date(endVal   + 'T23:59:59')),
           });
           showToast('✅ Subscription cost saved', 'success');
           el.remove();
@@ -1743,9 +1877,9 @@
         if (!confirm('Remove subscription cost for this user?')) return;
         try {
           await db.collection('userAccess').doc(uid).update({
-            subscriptionCost: firebase.firestore.FieldValue.delete(),
-            subPeriodStart:   firebase.firestore.FieldValue.delete(),
-            subPeriodEnd:     firebase.firestore.FieldValue.delete(),
+            subscriptionCost: window.firebase.firestore.FieldValue.delete(),
+            subPeriodStart:   window.firebase.firestore.FieldValue.delete(),
+            subPeriodEnd:     window.firebase.firestore.FieldValue.delete(),
           });
           showToast('Cost removed', 'success');
           el.remove();
@@ -1771,7 +1905,7 @@
           targetAll: false,
           message: msgText,
           type: msgType,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt: _serverTs(),
           read: false,
           dismissed: false,
           sentBy: state.user?.email || 'admin'
@@ -1855,7 +1989,7 @@
           await db.collection('popupMessages').add({
             targetUid: null, targetAll: true,
             message: msgText, type: msgType,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: _serverTs(),
             read: false, dismissed: false,
             sentBy: state.user?.email || 'admin'
           });
@@ -1893,24 +2027,23 @@
     let unsubUsers = null;
 
     function listenUsers() {
-      unsubUsers = db.collection('userAccess').orderBy('lastLogin', 'desc').onSnapshot(snap => {
+      unsubUsers = db.collection('user_access').orderBy('last_login', 'desc').onSnapshot(snap => {
         state.users = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
         filterUsers();
         if (state.view === 'dashboard') render();
       }, err => {
-        console.error('Firestore listen error:', err);
+        console.error('Realtime listen error:', err);
       });
     }
 
     // ============================================================
     // AUTH STATE
     // ============================================================
-    auth.getRedirectResult().catch(() => {});
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    // Supabase handles session persistence automatically
 
     auth.onAuthStateChanged(async (user) => {
       if (user) {
-        state.user = { uid: user.uid, email: user.email };
+        state.user = { uid: user.uid || user.id, id: user.id || user.uid, email: user.email };
 
         // Only admin allowed
         if (user.email !== ADMIN_EMAIL) {
