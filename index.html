@@ -412,29 +412,49 @@
       auth: { Auth: { Persistence: { LOCAL: 'local' } } },
     };
 
+    const _FIELD_TO_SB = {
+      displayName:'display_name', photoURL:'photo_url', gbUsername:'gb_username',
+      expiryDate:'expiry_date', isDisabled:'is_disabled', isUnlimited:'is_unlimited',
+      lastLogin:'last_login', createdAt:'created_at', updatedAt:'updated_at',
+      subPeriodStart:'sub_period_start', subPeriodEnd:'sub_period_end',
+      subscriptionCost:'subscription_cost', ownerUid:'owner_uid',
+      targetUid:'target_uid', targetAll:'target_all', dismissedAt:'dismissed_at',
+      employeeId:'employee_id',
+    };
+    const _FIELD_FROM_SB = Object.fromEntries(Object.entries(_FIELD_TO_SB).map(([k,v])=>[v,k]));
+
     function _sbConvert(obj) {
       if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
       const out = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (v === undefined) continue; // FieldValue.delete()
-        out[k] = (v && typeof v === 'object' && v._isTs) ? v.toDate().toISOString()
-                 : typeof v === 'function' ? v()
-                 : v;
+      for (let [k, v] of Object.entries(obj)) {
+        if (v === undefined) continue;
+        if (v && typeof v === 'object' && v._isTs) v = v.toDate().toISOString();
+        if (typeof v === 'function') v = v();
+        out[_FIELD_TO_SB[k] || k] = v;
       }
+      return out;
+    }
+    function _sbFromRow(row) {
+      if (!row) return null;
+      const out = {};
+      for (const [k, v] of Object.entries(row)) {
+        out[_FIELD_FROM_SB[k] || k] = v;
+      }
+      if (row.id) { out.id = row.id; out._id = row.id; out.uid = row.uid || row.id; }
       return out;
     }
 
     class _SBRef {
       constructor(table, id) { this._table = table; this._id = id || null; this._wheres = []; this._ord = null; this._asc = true; this._lim = null; }
-      where(f, op, v) { const c = this._clone(); const m = {'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'}; c._wheres.push({f, op: m[op]||'eq', v}); return c; }
-      orderBy(f, dir) { const c = this._clone(); c._ord = f; c._asc = dir !== 'desc'; return c; }
+      where(f, op, v) { const c = this._clone(); const m = {'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'}; c._wheres.push({f: _FIELD_TO_SB[f]||f, op: m[op]||'eq', v}); return c; }
+      orderBy(f, dir) { const c = this._clone(); c._ord = _FIELD_TO_SB[f]||f; c._asc = dir !== 'desc'; return c; }
       limit(n) { const c = this._clone(); c._lim = n; return c; }
       doc(id) { const c = this._clone(); c._id = id; return c; }
       collection(sub) { return new _SBRef(sub, null); }
       _clone() { return Object.assign(Object.create(_SBRef.prototype), this, {_wheres:[...this._wheres]}); }
       _q(sel) {
         let q = _supabase.from(this._table).select(sel||'*');
-        for (const w of this._wheres) q = q[w.op](w.f, w.v);
+        for (const w of this._wheres) q = q[w.op](w.f, w.v); // field already snake_case
         if (this._ord) q = q.order(this._ord, {ascending: this._asc});
         if (this._lim) q = q.limit(this._lim);
         return q;
@@ -443,12 +463,12 @@
         if (this._id) {
           const {data, error} = await _supabase.from(this._table).select('*').eq('id', this._id).single();
           if (error && error.code !== 'PGRST116') console.warn('[db.get]', error);
-          const row = data ? {...data, _id: data.id} : null;
+          const row = data ? _sbFromRow(data) : null;
           return { exists: !!data, data: () => row, id: this._id };
         }
         const {data, error} = await this._q('*');
         if (error) console.warn('[db.collection.get]', error);
-        const docs = (data||[]).map(r => ({id:r.id, exists:true, data:()=>({...r,_id:r.id})}));
+        const docs = (data||[]).map(r => ({id:r.id, exists:true, data:()=>_sbFromRow(r)}));
         return { docs, empty: !docs.length };
       }
       async set(payload, opts) {
@@ -485,12 +505,15 @@
       onSnapshot(cb, errCb) {
         const self = this;
         this.get().then(snap => cb(snap)).catch(e => errCb && errCb(e));
+        let _deb = null;
         const ch = _supabase.channel('admin_'+this._table+'_'+Date.now())
-          .on('postgres_changes', {event:'*', schema:'public', table: this._table}, async () => {
-            const fresh = await self.get();
-            cb(fresh);
+          .on('postgres_changes', {event:'*', schema:'public', table: this._table}, () => {
+            clearTimeout(_deb);
+            _deb = setTimeout(async () => {
+              try { cb(await self.get()); } catch(e) { errCb && errCb(e); }
+            }, 300);
           }).subscribe();
-        return () => _supabase.removeChannel(ch);
+        return () => { clearTimeout(_deb); _supabase.removeChannel(ch); };
       }
     }
 
