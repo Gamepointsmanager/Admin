@@ -393,8 +393,12 @@
     // ── Supabase init ──────────────────────────────────────────────
     const _supabase = window.supabase.createClient(
       'https://kzchxmulktygoqhiwpff.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg'
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg',
+      { auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true, flowType: 'implicit' } }
     );
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
 
     // ── db shim: wraps Supabase so db.collection/doc/onSnapshot work ──
     const _serverTs = () => new Date().toISOString();
@@ -461,8 +465,9 @@
       }
       async get() {
         if (this._id) {
-          const {data, error} = await _supabase.from(this._table).select('*').eq('id', this._id).single();
-          if (error && error.code !== 'PGRST116') console.warn('[db.get]', error);
+          const pkField = (this._table === 'user_access') ? 'uid' : 'id';
+          const {data, error} = await _supabase.from(this._table).select('*').eq(pkField, this._id).single();
+          if (error && error.code !== 'PGRST116') console.warn('[db.get]', this._table, error);
           const row = data ? _sbFromRow(data) : null;
           return { exists: !!data, data: () => row, id: this._id };
         }
@@ -474,25 +479,27 @@
       async set(payload, opts) {
         const d = _sbConvert(payload);
         if (this._id) {
-          const {error} = await _supabase.from(this._table).upsert({id: this._id, ...d});
-          if (error) throw error;
+          const pkField = (this._table === 'user_access') ? 'uid' : 'id';
+          const {error} = await _supabase.from(this._table).upsert({[pkField]: this._id, ...d});
+          if (error) { console.error('[db.set] error:', this._table, error); throw error; }
         } else {
           const {data, error} = await _supabase.from(this._table).insert(d).select().single();
-          if (error) throw error;
+          if (error) { console.error('[db.set] insert error:', this._table, error); throw error; }
           this._id = data.id;
         }
       }
       async update(payload) {
         if (!this._id) throw new Error('[db.update] no id');
         const d = _sbConvert(payload);
-        // Remove undefined values (FieldValue.delete())
         const clean = Object.fromEntries(Object.entries(d).filter(([,v])=>v!==undefined));
-        const {error} = await _supabase.from(this._table).update(clean).eq('id', this._id);
-        if (error) throw error;
+        const pkField = (this._table === 'user_access') ? 'uid' : 'id';
+        const {error} = await _supabase.from(this._table).update(clean).eq(pkField, this._id);
+        if (error) { console.error('[db.update] error:', this._table, error); throw error; }
       }
       async delete() {
         if (this._id) {
-          const {error} = await _supabase.from(this._table).delete().eq('id', this._id);
+          const pkField = (this._table === 'user_access') ? 'uid' : 'id';
+          const {error} = await _supabase.from(this._table).delete().eq(pkField, this._id);
           if (error) throw error;
         }
       }
