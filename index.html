@@ -390,162 +390,95 @@
     // ============================================================
     // FIREBASE INIT
     // ============================================================
-    // ── Supabase SDK init ─────────────────────────────────────────────────────
-    const _supabase = window.supabase.createClient(
-      'https://kzchxmulktygoqhiwpff.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg',
-      { auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } }
-    );
-    if (window.location.search.includes('code=') || window.location.hash.includes('access_token')) {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-
-    // ── Supabase shim ─────────────────────────────────────────────────────────
+    const _supabase = window.supabase.createClient('https://kzchxmulktygoqhiwpff.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg');
     const _serverTs = () => new Date().toISOString();
-    window.firebase = {
-      firestore: {
-        FieldValue: { serverTimestamp:_serverTs, delete:()=>undefined },
-        Timestamp: {
-          fromDate:   (d)  => ({ toDate:()=>d, toMillis:()=>d.getTime(), _isTs:true }),
-          fromMillis: (ms) => ({ toDate:()=>new Date(ms), toMillis:()=>ms, _isTs:true }),
-        },
+    window.firebase = { firestore: {
+      FieldValue: { serverTimestamp:_serverTs, delete:()=>undefined },
+      Timestamp: {
+        fromDate: d => ({toDate:()=>d,toMillis:()=>d.getTime(),_isTs:true}),
+        fromMillis: ms => ({toDate:()=>new Date(ms),toMillis:()=>ms,_isTs:true}),
       },
-      auth: { Auth: { Persistence: { LOCAL:'local' } } },
-    };
-    window.firebase.auth.GoogleAuthProvider = function() {};
+    }, auth: { Auth: { Persistence: { LOCAL:'local' } } } };
+    window.firebase.auth.GoogleAuthProvider = function(){};
 
-    const _FIELD_TO_SB = {
-      displayName:'display_name', photoURL:'photo_url', gbUsername:'gb_username',
-      expiryDate:'expiry_date', isDisabled:'is_disabled', isUnlimited:'is_unlimited',
-      lastLogin:'last_login', createdAt:'created_at', updatedAt:'updated_at',
-      subPeriodStart:'sub_period_start', subPeriodEnd:'sub_period_end',
-      subscriptionCost:'subscription_cost', targetUid:'target_uid',
-      targetAll:'target_all', dismissedAt:'dismissed_at', employeeId:'employee_id',
+    const _F2S = {
+      displayName:'display_name',photoURL:'photo_url',gbUsername:'gb_username',
+      expiryDate:'expiry_date',isDisabled:'is_disabled',isUnlimited:'is_unlimited',
+      lastLogin:'last_login',createdAt:'created_at',updatedAt:'updated_at',
+      subPeriodStart:'sub_period_start',subPeriodEnd:'sub_period_end',
+      subscriptionCost:'subscription_cost',targetUid:'target_uid',
+      targetAll:'target_all',dismissedAt:'dismissed_at',employeeId:'employee_id',
       ownerUid:'owner_uid',
     };
-    const _FIELD_FROM_SB = Object.fromEntries(Object.entries(_FIELD_TO_SB).map(([k,v])=>[v,k]));
-    function _toSB(obj) {
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-      const out = {};
-      for (let [k,v] of Object.entries(obj)) {
-        if (v===undefined) continue;
-        if (v && typeof v==='object' && v._isTs) v=v.toDate().toISOString();
-        if (typeof v==='function') v=v();
-        out[_FIELD_TO_SB[k]||k]=v;
+    const _S2F = Object.fromEntries(Object.entries(_F2S).map(([k,v])=>[v,k]));
+    const _UID_PK = new Set(['user_access','employee_uids']);
+    const _pk = t => _UID_PK.has(t) ? 'uid' : 'id';
+    function _toSB(obj){
+      if(!obj||typeof obj!=='object'||Array.isArray(obj))return obj;
+      const out={};
+      for(let [k,v] of Object.entries(obj)){
+        if(v===undefined)continue;
+        if(v&&typeof v==='object'&&v._isTs)v=v.toDate().toISOString();
+        if(typeof v==='function')v=v();
+        out[_F2S[k]||k]=v;
       }
       return out;
     }
-    function _fromSB(row) {
-      if (!row) return null;
+    function _fromSB(row){
+      if(!row)return null;
       const out={};
-      for (const [k,v] of Object.entries(row)) out[_FIELD_FROM_SB[k]||k]=v;
-      if (row.id)  { out.id=row.id;   out._id=row.id; }
-      if (row.uid) { out.uid=row.uid; }
+      for(const [k,v] of Object.entries(row))out[_S2F[k]||k]=v;
+      if(row.id){out.id=row.id;out._id=row.id;}
+      if(row.uid)out.uid=row.uid;
       return out;
     }
-    const _UID_PK = new Set(['user_access','employee_uids']);
-    const _pk = t => _UID_PK.has(t) ? 'uid' : 'id';
-    const _PATH_MAP = {
-      userAccess:'user_access', gbUsernames:'gb_usernames', popupMessages:'popup_messages',
-      employeeLinks:'employee_links', employeeUids:'employee_uids', organizations:'organizations',
-    };
-    class _SBRef {
+    const _PATH_MAP={userAccess:'user_access',gbUsernames:'gb_usernames',popupMessages:'popup_messages',employeeLinks:'employee_links',employeeUids:'employee_uids',organizations:'organizations'};
+    class _SBRef{
       constructor(t,id){this._t=t;this._id=id||null;this._w=[];this._ord=null;this._asc=true;this._lim=null;}
       _clone(){const c=new _SBRef(this._t,this._id);c._w=[...this._w];c._ord=this._ord;c._asc=this._asc;c._lim=this._lim;return c;}
-      where(f,op,v){const c=this._clone();const m={'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'};c._w.push({f:_FIELD_TO_SB[f]||f,op:m[op]||'eq',v});return c;}
-      orderBy(f,dir){const c=this._clone();c._ord=_FIELD_TO_SB[f]||f;c._asc=dir!=='desc';return c;}
+      where(f,op,v){const c=this._clone();const m={'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'};c._w.push({f:_F2S[f]||f,op:m[op]||'eq',v});return c;}
+      orderBy(f,dir){const c=this._clone();c._ord=_F2S[f]||f;c._asc=dir!=='desc';return c;}
       limit(n){const c=this._clone();c._lim=n;return c;}
       doc(id){const c=this._clone();c._id=id;return c;}
       collection(sub){return new _SBRef(_PATH_MAP[sub]||sub,null);}
       _q(sel){let q=_supabase.from(this._t).select(sel||'*');for(const w of this._w)q=q[w.op](w.f,w.v);if(this._ord)q=q.order(this._ord,{ascending:this._asc});if(this._lim)q=q.limit(this._lim);return q;}
       async get(){
-        if(this._id){
-          const{data,error}=await _supabase.from(this._t).select('*').eq(_pk(this._t),this._id).single();
-          if(error&&error.code!=='PGRST116')console.warn('[db.get]',this._t,error.message);
-          return{exists:!!data,data:()=>_fromSB(data),id:this._id};
-        }
-        const{data,error}=await this._q('*');
-        if(error)console.warn('[db.collection]',this._t,error.message);
-        const docs=(data||[]).map(r=>({id:r.id||r.uid,exists:true,data:()=>_fromSB(r)}));
+        if(this._id){const{data,error}=await _supabase.from(this._t).select('*').eq(_pk(this._t),this._id).single();if(error&&error.code!=='PGRST116')console.warn('[db.get]',this._t,error.message);return{exists:!!data,data:()=>_fromSB(data),id:this._id};}
+        const{data,error}=await this._q('*');if(error)console.warn('[db.col]',this._t,error.message);
+        const docs=(data||[]).map(r=>{return{id:r.id||r.uid,exists:true,data:()=>_fromSB(r)}});
         return{docs,empty:!docs.length};
       }
-      async set(payload){
-        const d=_toSB(payload),pk=_pk(this._t);
-        if(this._id){const{error}=await _supabase.from(this._t).upsert({[pk]:this._id,...d});if(error){console.error('[db.set]',this._t,error.message);throw error;}}
-        else{const{data:row,error}=await _supabase.from(this._t).insert(d).select().single();if(error){console.error('[db.set]',this._t,error.message);throw error;}this._id=row.id;}
-        return this;
-      }
-      async update(payload){
-        const clean=Object.fromEntries(Object.entries(_toSB(payload)).filter(([,v])=>v!==undefined));
-        const{error}=await _supabase.from(this._t).update(clean).eq(_pk(this._t),this._id);
-        if(error){console.error('[db.update]',this._t,error.message);throw error;}
-      }
-      async delete(){
-        if(this._id){const{error}=await _supabase.from(this._t).delete().eq(_pk(this._t),this._id);if(error)throw error;}
-      }
-      async add(payload){
-        const{data:row,error}=await _supabase.from(this._t).insert(_toSB(payload)).select().single();
-        if(error){console.error('[db.add]',this._t,error.message);throw error;}
-        return{id:row.id};
-      }
+      async set(payload){const d=_toSB(payload),pk=_pk(this._t);if(this._id){const{error}=await _supabase.from(this._t).upsert({[pk]:this._id,...d});if(error){console.error('[db.set]',this._t,error.message);throw error;}}else{const{data:row,error}=await _supabase.from(this._t).insert(d).select().single();if(error){console.error('[db.set]',this._t,error.message);throw error;}this._id=row.id;}return this;}
+      async update(payload){const clean=Object.fromEntries(Object.entries(_toSB(payload)).filter(([,v])=>v!==undefined));const{error}=await _supabase.from(this._t).update(clean).eq(_pk(this._t),this._id);if(error){console.error('[db.update]',this._t,error.message);throw error;}}
+      async delete(){if(this._id){const{error}=await _supabase.from(this._t).delete().eq(_pk(this._t),this._id);if(error)throw error;}}
+      async add(payload){const{data:row,error}=await _supabase.from(this._t).insert(_toSB(payload)).select().single();if(error){console.error('[db.add]',this._t,error.message);throw error;}return{id:row.id};}
       onSnapshot(cb,errCb){
-        const self=this;
-        this.get().then(cb).catch(e=>errCb&&errCb(e));
+        const self=this;this.get().then(cb).catch(e=>errCb&&errCb(e));
         let _deb=null;
-        const ch=_supabase.channel(this._t+'_'+Date.now())
-          .on('postgres_changes',{event:'*',schema:'public',table:this._t},()=>{
-            clearTimeout(_deb);
-            _deb=setTimeout(()=>self.get().then(cb).catch(e=>errCb&&errCb(e)),400);
-          }).subscribe();
+        const ch=_supabase.channel(this._t+'_'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:this._t},()=>{clearTimeout(_deb);_deb=setTimeout(()=>self.get().then(cb).catch(e=>errCb&&errCb(e)),400);}).subscribe();
         return()=>{clearTimeout(_deb);_supabase.removeChannel(ch);};
       }
     }
-    function _toRef(path){
-      const parts=path.split('/').filter(Boolean);
-      if(parts[0]==='users')parts.splice(0,2);
-      return new _SBRef(_PATH_MAP[parts[0]]||parts[0],parts[1]||null);
-    }
+    function _toRef(path){const parts=path.split('/').filter(Boolean);if(parts[0]==='users')parts.splice(0,2);return new _SBRef(_PATH_MAP[parts[0]]||parts[0],parts[1]||null);}
     const db={collection:_toRef,doc:_toRef};
 
-    // ── Auth — single fire, no double-trigger ────────────────────────────────
-    let _lastAuthUid=null;
-    function _sbUser(u){
-      if(!u)return null;
-      return{uid:u.id,id:u.id,email:u.email,
-        displayName:u.user_metadata?.full_name||u.user_metadata?.name||'',
-        photoURL:u.user_metadata?.avatar_url||''};
-    }
+    function _toFbUser(u){if(!u)return null;return{uid:u.id,id:u.id,email:u.email,displayName:u.user_metadata?.full_name||u.user_metadata?.name||'',photoURL:u.user_metadata?.avatar_url||''};}
     const auth={
-      async signInWithPopup(){
-        const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+window.location.pathname}});
-        if(error)throw error;
-      },
-      async signInWithRedirect(){
-        const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+window.location.pathname}});
-        if(error)throw error;
-      },
-      async getRedirectResult(){return null;},
-      async setPersistence(){},
-      async signOut(){_lastAuthUid=null;return _supabase.auth.signOut();},
+      signInWithPopup:async()=>{const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin}});if(error)throw error;},
+      signInWithRedirect:async()=>{const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin}});if(error)throw error;},
+      getRedirectResult:async()=>null,
+      setPersistence:async()=>{},
+      signOut:async()=>_supabase.auth.signOut(),
       onAuthStateChanged(cb){
-        let _fired=false;
-        _supabase.auth.getSession().then(({data:{session}})=>{
-          if(_fired)return;
-          _fired=true;
-          const user=session?.user??null;
-          _lastAuthUid=user?.id??null;
-          cb(_sbUser(user));
-        });
         const{data:{subscription}}=_supabase.auth.onAuthStateChange((event,session)=>{
-          const user=session?.user??null,uid=user?.id??null;
-          if(event==='INITIAL_SESSION'){if(_fired)return;_fired=true;_lastAuthUid=uid;cb(_sbUser(user));return;}
-          if(uid===_lastAuthUid&&event!=='SIGNED_OUT')return;
-          _lastAuthUid=uid;
-          cb(_sbUser(user));
+          console.log('[Auth]',event,session?.user?.email||'no user');
+          cb(_toFbUser(session?.user??null));
         });
         return()=>subscription.unsubscribe();
       },
     };
+    auth.getRedirectResult().catch(()=>{});
+    auth.setPersistence('local').catch(()=>{});
 
     const ADMIN_EMAIL = 'service@sweepadmin.com';
     const $ = (s) => document.querySelector(s);
@@ -2024,29 +1957,20 @@
 
     function listenUsers() {
       unsubUsers = db.collection('userAccess').orderBy('lastLogin', 'desc').onSnapshot(snap => {
-        state.users = snap.docs.map(d => ({ uid: d.data()?.uid || d.id, ...d.data() }));
+        state.users = snap.docs.map(d => ({ uid: d.data()?.uid||d.id, ...d.data() }));
         filterUsers();
         if (state.view === 'dashboard') render();
       }, err => {
-        console.error('Realtime listen error:', err);
+        console.error('Realtime error:', err);
       });
     }
 
     // ============================================================
     // AUTH STATE
     // ============================================================
-    // Supabase handles session persistence automatically
 
-    const _authTimeout = setTimeout(() => {
-      if (state.view === 'loading') {
-        console.warn('[Auth] Timeout — forcing login');
-        state.view = 'login';
-        render();
-      }
-    }, 10000);
 
     auth.onAuthStateChanged(async (user) => {
-      clearTimeout(_authTimeout);
       if (user) {
         state.user = { uid: user.uid||user.id, id: user.id||user.uid, email: user.email };
 
