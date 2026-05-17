@@ -12,8 +12,10 @@
   <link rel="icon" href="icon-192.png" type="image/png" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Supabase SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -390,101 +392,19 @@
     // ============================================================
     // FIREBASE INIT
     // ============================================================
-    const _supabase = window.supabase.createClient('https://kzchxmulktygoqhiwpff.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjIxMjUsImV4cCI6MjA5NDM5ODEyNX0.besz9_RUFQ9ZCC7OVxS6ApkFdm1N06d1hS2uGuj-ZSg');
-    const _serverTs = () => new Date().toISOString();
-    window.firebase = { firestore: {
-      FieldValue: { serverTimestamp:_serverTs, delete:()=>undefined },
-      Timestamp: {
-        fromDate: d => ({toDate:()=>d,toMillis:()=>d.getTime(),_isTs:true}),
-        fromMillis: ms => ({toDate:()=>new Date(ms),toMillis:()=>ms,_isTs:true}),
-      },
-    }, auth: { Auth: { Persistence: { LOCAL:'local' } } } };
-    window.firebase.auth.GoogleAuthProvider = function(){};
-
-    const _F2S = {
-      displayName:'display_name',photoURL:'photo_url',gbUsername:'gb_username',
-      expiryDate:'expiry_date',isDisabled:'is_disabled',isUnlimited:'is_unlimited',
-      lastLogin:'last_login',createdAt:'created_at',updatedAt:'updated_at',
-      subPeriodStart:'sub_period_start',subPeriodEnd:'sub_period_end',
-      subscriptionCost:'subscription_cost',targetUid:'target_uid',
-      targetAll:'target_all',dismissedAt:'dismissed_at',sentBy:'sent_by',employeeId:'employee_id',
-      ownerUid:'owner_uid',
+    const firebaseConfig = {
+      apiKey: "AIzaSyDjrOg8Q0sIXI6Jo5f4DT2x-kv9rkbaMx0",
+      authDomain: "auth.sweepadmin.com",
+      projectId: "sweepadministrator",
+      storageBucket: "sweepadministrator.firebasestorage.app",
+      messagingSenderId: "909535669253",
+      appId: "1:909535669253:web:8389b6274f269178c3806c",
+      measurementId: "G-0LMKKJRY4X"
     };
-    const _S2F = Object.fromEntries(Object.entries(_F2S).map(([k,v])=>[v,k]));
-    const _UID_PK = new Set(['user_access','employee_uids']);
-    const _pk = t => _UID_PK.has(t) ? 'uid' : 'id';
-    function _toSB(obj){
-      if(!obj||typeof obj!=='object'||Array.isArray(obj))return obj;
-      const out={};
-      for(let [k,v] of Object.entries(obj)){
-        if(v===undefined)continue;
-        if(v&&typeof v==='object'&&v._isTs)v=v.toDate().toISOString();
-        if(typeof v==='function')v=v();
-        out[_F2S[k]||k]=v;
-      }
-      return out;
-    }
-    function _fromSB(row){
-      if(!row)return null;
-      const out={};
-      for(const [k,v] of Object.entries(row))out[_S2F[k]||k]=v;
-      if(row.id){out.id=row.id;out._id=row.id;}
-      if(row.uid)out.uid=row.uid;
-      return out;
-    }
-    const _PATH_MAP={userAccess:'user_access',gbUsernames:'gb_usernames',popupMessages:'popup_messages',employeeLinks:'employee_links',employeeUids:'employee_uids',organizations:'organizations'};
-    class _SBRef{
-      constructor(t,id){this._t=t;this._id=id||null;this._w=[];this._ord=null;this._asc=true;this._lim=null;}
-      _clone(){const c=new _SBRef(this._t,this._id);c._w=[...this._w];c._ord=this._ord;c._asc=this._asc;c._lim=this._lim;return c;}
-      where(f,op,v){const c=this._clone();const m={'==':'eq','!=':'neq','>':'gt','>=':'gte','<':'lt','<=':'lte'};c._w.push({f:_F2S[f]||f,op:m[op]||'eq',v});return c;}
-      orderBy(f,dir){const c=this._clone();c._ord=_F2S[f]||f;c._asc=dir!=='desc';return c;}
-      limit(n){const c=this._clone();c._lim=n;return c;}
-      doc(id){const c=this._clone();c._id=id;return c;}
-      collection(sub){return new _SBRef(_PATH_MAP[sub]||sub,null);}
-      _q(sel){let q=_supabase.from(this._t).select(sel||'*');for(const w of this._w)q=q[w.op](w.f,w.v);if(this._ord)q=q.order(this._ord,{ascending:this._asc});if(this._lim)q=q.limit(this._lim);return q;}
-      async get(){
-        if(this._id){const{data,error}=await _supabase.from(this._t).select('*').eq(_pk(this._t),this._id).single();if(error&&error.code!=='PGRST116')console.warn('[db.get]',this._t,error.message);return{exists:!!data,data:()=>_fromSB(data),id:this._id};}
-        const{data,error}=await this._q('*');if(error)console.warn('[db.col]',this._t,error.message);
-        const docs=(data||[]).map(r=>{return{id:r.id||r.uid,exists:true,data:()=>_fromSB(r)}});
-        return{docs,empty:!docs.length};
-      }
-      async set(payload){const d=_toSB(payload),pk=_pk(this._t);if(this._id){const{error}=await _supabase.from(this._t).upsert({[pk]:this._id,...d});if(error){console.error('[db.set]',this._t,error.message);throw error;}}else{const{data:row,error}=await _supabase.from(this._t).insert(d).select().single();if(error){console.error('[db.set]',this._t,error.message);throw error;}this._id=row.id;}return this;}
-      async update(payload){const clean=Object.fromEntries(Object.entries(_toSB(payload)).filter(([,v])=>v!==undefined));const{error}=await _supabase.from(this._t).update(clean).eq(_pk(this._t),this._id);if(error){console.error('[db.update]',this._t,error.message);throw error;}}
-      async delete(){if(this._id){const{error}=await _supabase.from(this._t).delete().eq(_pk(this._t),this._id);if(error)throw error;}}
-      async add(payload){const{data:row,error}=await _supabase.from(this._t).insert(_toSB(payload)).select().single();if(error){console.error('[db.add]',this._t,error.message);throw error;}return{id:row.id};}
-      onSnapshot(cb,errCb){
-        const self=this;this.get().then(cb).catch(e=>errCb&&errCb(e));
-        let _deb=null;
-        const ch=_supabase.channel(this._t+'_'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:this._t},()=>{clearTimeout(_deb);_deb=setTimeout(()=>self.get().then(cb).catch(e=>errCb&&errCb(e)),400);}).subscribe();
-        return()=>{clearTimeout(_deb);_supabase.removeChannel(ch);};
-      }
-    }
-    function _toRef(path){const parts=path.split('/').filter(Boolean);if(parts[0]==='users')parts.splice(0,2);return new _SBRef(_PATH_MAP[parts[0]]||parts[0],parts[1]||null);}
-    const db={collection:_toRef,doc:_toRef};
 
-    function _toFbUser(u){if(!u)return null;return{uid:u.id,id:u.id,email:u.email,displayName:u.user_metadata?.full_name||u.user_metadata?.name||'',photoURL:u.user_metadata?.avatar_url||''};}
-    const auth={
-      signInWithPopup:async()=>{const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin}});if(error)throw error;},
-      signInWithRedirect:async()=>{const{error}=await _supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin}});if(error)throw error;},
-      getRedirectResult:async()=>null,
-      setPersistence:async()=>{},
-      signOut:async()=>_supabase.auth.signOut(),
-      onAuthStateChanged(cb){
-        // Fire immediately with current session so app doesn't hang
-        _supabase.auth.getSession().then(({data:{session}})=>{
-          console.log('[Auth] initial session:', session?.user?.email||'none');
-          cb(_toFbUser(session?.user??null));
-        });
-        const{data:{subscription}}=_supabase.auth.onAuthStateChange((event,session)=>{
-          if(event==='INITIAL_SESSION') return; // already handled by getSession above
-          console.log('[Auth]',event,session?.user?.email||'no user');
-          cb(_toFbUser(session?.user??null));
-        });
-        return()=>subscription.unsubscribe();
-      },
-    };
-    auth.getRedirectResult().catch(()=>{});
-    auth.setPersistence('local').catch(()=>{});
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
     const ADMIN_EMAIL = 'service@sweepadmin.com';
     const $ = (s) => document.querySelector(s);
@@ -587,7 +507,7 @@
       if (u.isDisabled) return { label:'Disabled', cls:'status-disabled', color:'var(--textMuted)' };
       if (!u.expiryDate) return { label:'No Access', cls:'status-none', color:'var(--textMuted)' };
       const now = new Date();
-      const exp = new Date(u.expiryDate);
+      const exp = u.expiryDate.toDate();
       const diff = Math.ceil((exp - now) / (1000*60*60*24));
       if (diff <= 0) return { label:'Expired', cls:'status-expired', color:'var(--red)' };
       if (diff <= 3) return { label:'Expiring', cls:'status-expiring', color:'var(--orange)' };
@@ -596,21 +516,21 @@
 
     function getDaysLeft(u) {
       if (u.isDisabled || !u.expiryDate) return null;
-      const diff = Math.ceil((new Date(u.expiryDate) - new Date()) / (1000*60*60*24));
+      const diff = Math.ceil((u.expiryDate.toDate() - new Date()) / (1000*60*60*24));
       return Math.max(0, diff);
     }
 
     function formatDate(ts) {
       if (!ts) return 'N/A';
-      return new Date(ts).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      return new Date(ts.toDate()).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
     }
 
     function filterUsers() {
       const now = new Date();
       let list = [...state.users];
       // Status filter
-      if (state.activeFilter === 'active') list = list.filter(u => !u.isDisabled && u.expiryDate && new Date(u.expiryDate) > now);
-      else if (state.activeFilter === 'expired') list = list.filter(u => !u.isDisabled && u.expiryDate && new Date(u.expiryDate) <= now);
+      if (state.activeFilter === 'active') list = list.filter(u => !u.isDisabled && u.expiryDate && u.expiryDate.toDate() > now);
+      else if (state.activeFilter === 'expired') list = list.filter(u => !u.isDisabled && u.expiryDate && u.expiryDate.toDate() <= now);
       else if (state.activeFilter === 'disabled') list = list.filter(u => u.isDisabled);
       else if (state.activeFilter === 'noAccess') list = list.filter(u => !u.expiryDate && !u.isDisabled);
       // Search filter
@@ -630,8 +550,8 @@
       const now = new Date();
       return {
         all: state.users.length,
-        active: state.users.filter(u => !u.isDisabled && u.expiryDate && new Date(u.expiryDate) > now).length,
-        expired: state.users.filter(u => !u.isDisabled && u.expiryDate && new Date(u.expiryDate) <= now).length,
+        active: state.users.filter(u => !u.isDisabled && u.expiryDate && u.expiryDate.toDate() > now).length,
+        expired: state.users.filter(u => !u.isDisabled && u.expiryDate && u.expiryDate.toDate() <= now).length,
         disabled: state.users.filter(u => u.isDisabled).length,
         noAccess: state.users.filter(u => !u.expiryDate && !u.isDisabled).length,
       };
@@ -706,7 +626,18 @@
         btn.innerHTML = '<span style="animation:pulse 1s infinite">Signing in...</span>';
         btn.disabled = true;
         try {
-          await auth.signInWithPopup();
+          const provider = new firebase.auth.GoogleAuthProvider();
+          try {
+            await auth.signInWithPopup(provider);
+          } catch (popupErr) {
+            if (popupErr.code === 'auth/popup-blocked' ||
+                popupErr.code === 'auth/cancelled-popup-request' ||
+                popupErr.code === 'auth/operation-not-supported-in-this-environment') {
+              await auth.signInWithRedirect(provider);
+            } else {
+              throw popupErr;
+            }
+          }
         } catch(e) {
           const err = $('#loginError');
           err.classList.remove('hidden');
@@ -727,7 +658,7 @@
           <h2 style="font-family:'Orbitron',monospace;font-size:18px;color:var(--red);margin-bottom:12px">ACCESS DENIED</h2>
           <p style="color:var(--textMuted);font-size:14px;margin-bottom:24px">This panel is restricted to the admin account only.</p>
           <p style="color:var(--textMuted);font-size:12px;margin-bottom:24px">Signed in as: ${state.user?.email || ''}</p>
-          <button onclick="auth.signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
+          <button onclick="firebase.auth().signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
         </div>
       </div>`;
     }
@@ -814,7 +745,8 @@
           <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--glassBorder)">
             <div style="font-size:10px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px">Admin</div>
             <div style="font-size:12px;color:var(--textSecondary);line-height:1.8;margin-bottom:12px">${state.user?.email || ''}</div>
-            <button onclick="auth.signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+            <button onclick="showPaymentSettingsModal()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(124,58,237,0.45);background:rgba(124,58,237,0.1);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px;margin-bottom:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Payment & Contact Settings</button>
+            <button onclick="firebase.auth().signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
           </div>
         </div>`;
     }
@@ -1107,10 +1039,10 @@
           const trialStart = new Date();
           const newExpiry = new Date(Date.now() + 3*24*60*60*1000);
           await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: window.firebase.firestore.Timestamp.fromDate(newExpiry),
+            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
             isDisabled: false,
-            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(trialStart),
-            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(newExpiry),
+            subPeriodStart: firebase.firestore.Timestamp.fromDate(trialStart),
+            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
           });
           showToast('🎁 Free trial activated (3 days)', 'success');
           const updated = state.users.find(x=>x.uid===u.uid); if (updated) state.selectedUser=updated;
@@ -1125,10 +1057,10 @@
           const unlimStart = new Date();
           const newExpiry = new Date(Date.now() + 100*365*24*60*60*1000);
           await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: window.firebase.firestore.Timestamp.fromDate(newExpiry),
+            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
             isDisabled: false,
-            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(unlimStart),
-            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(newExpiry),
+            subPeriodStart: firebase.firestore.Timestamp.fromDate(unlimStart),
+            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
           });
           showToast('♾️ Unlimited access granted','success');
           closeUserDetail();
@@ -1269,7 +1201,7 @@
           targetAll: false,
           message,
           type: msgType,
-          createdAt: _serverTs(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           read: false,
           dismissed: false,
           sentBy: state.user?.email || 'admin'
@@ -1336,11 +1268,11 @@
         const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 
         // Auto-set subscription period to match the access period
-        const startTs = window.firebase.firestore.Timestamp.fromDate(base);
-        const endTs   = window.firebase.firestore.Timestamp.fromDate(newExpiry);
+        const startTs = firebase.firestore.Timestamp.fromDate(base);
+        const endTs   = firebase.firestore.Timestamp.fromDate(newExpiry);
 
         await db.collection('userAccess').doc(u.uid).update({
-          expiryDate:     window.firebase.firestore.Timestamp.fromDate(newExpiry),
+          expiryDate:     firebase.firestore.Timestamp.fromDate(newExpiry),
           isDisabled:     false,
           subPeriodStart: startTs,
           subPeriodEnd:   endTs,
@@ -1799,8 +1731,8 @@
         try {
           await db.collection('userAccess').doc(uid).update({
             subscriptionCost: cost,
-            subPeriodStart: window.firebase.firestore.Timestamp.fromDate(new Date(startVal + 'T00:00:00')),
-            subPeriodEnd:   window.firebase.firestore.Timestamp.fromDate(new Date(endVal   + 'T23:59:59')),
+            subPeriodStart: firebase.firestore.Timestamp.fromDate(new Date(startVal + 'T00:00:00')),
+            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(new Date(endVal   + 'T23:59:59')),
           });
           showToast('✅ Subscription cost saved', 'success');
           el.remove();
@@ -1812,9 +1744,9 @@
         if (!confirm('Remove subscription cost for this user?')) return;
         try {
           await db.collection('userAccess').doc(uid).update({
-            subscriptionCost: window.firebase.firestore.FieldValue.delete(),
-            subPeriodStart:   window.firebase.firestore.FieldValue.delete(),
-            subPeriodEnd:     window.firebase.firestore.FieldValue.delete(),
+            subscriptionCost: firebase.firestore.FieldValue.delete(),
+            subPeriodStart:   firebase.firestore.FieldValue.delete(),
+            subPeriodEnd:     firebase.firestore.FieldValue.delete(),
           });
           showToast('Cost removed', 'success');
           el.remove();
@@ -1840,7 +1772,7 @@
           targetAll: false,
           message: msgText,
           type: msgType,
-          createdAt: _serverTs(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           read: false,
           dismissed: false,
           sentBy: state.user?.email || 'admin'
@@ -1924,7 +1856,7 @@
           await db.collection('popupMessages').add({
             targetUid: null, targetAll: true,
             message: msgText, type: msgType,
-            createdAt: _serverTs(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             read: false, dismissed: false,
             sentBy: state.user?.email || 'admin'
           });
@@ -1963,22 +1895,23 @@
 
     function listenUsers() {
       unsubUsers = db.collection('userAccess').orderBy('lastLogin', 'desc').onSnapshot(snap => {
-        state.users = snap.docs.map(d => ({ uid: d.data()?.uid||d.id, ...d.data() }));
+        state.users = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
         filterUsers();
         if (state.view === 'dashboard') render();
       }, err => {
-        console.error('Realtime error:', err);
+        console.error('Firestore listen error:', err);
       });
     }
 
     // ============================================================
     // AUTH STATE
     // ============================================================
-
+    auth.getRedirectResult().catch(() => {});
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
     auth.onAuthStateChanged(async (user) => {
       if (user) {
-        state.user = { uid: user.uid||user.id, id: user.id||user.uid, email: user.email };
+        state.user = { uid: user.uid, email: user.email };
 
         // Only admin allowed
         if (user.email !== ADMIN_EMAIL) {
@@ -2036,10 +1969,141 @@
     //   // "Got it" → db.collection('popupMessages').doc(docId).update({ read: true })
     //   // "Remind later" → db.collection('popupMessages').doc(docId).update({ dismissed: true })
     // }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('[SW] registered:', reg.scope))
-        .catch(e => console.log('[SW] failed:', e.message));
+
+    // ============================================================
+    // PAYMENT & CONTACT SETTINGS MODAL (admin backend)
+    // ============================================================
+    function escB(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    async function showPaymentSettingsModal() {
+      document.getElementById('paymentSettingsBModal')?.remove();
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay';
+      ov.id = 'paymentSettingsBModal';
+      ov.innerHTML = `
+        <div class="modal fade-in" style="max-width:500px;max-height:92vh;overflow-y:auto">
+          <div class="modal-header" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(14,11,28,0.9))">
+            <h3 style="font-family:'Orbitron',monospace;color:#a78bfa;font-size:14px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" style="vertical-align:-2px;margin-right:6px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              PAYMENT &amp; CONTACT SETTINGS
+            </h3>
+            <button class="modal-close" id="psBackClose">&#x2715;</button>
+          </div>
+          <div class="modal-body" id="psBackBody">
+            <div style="text-align:center;padding:20px;font-size:13px;color:var(--textMuted)">Loading&#x2026;</div>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      ov.onclick = e => { if (e.target === ov) ov.remove(); };
+      document.getElementById('psBackClose').onclick = () => ov.remove();
+
+      let addresses = [], contacts = [];
+      try {
+        const snap = await db.doc('siteConfig/paymentInfo').get();
+        if (snap.exists) {
+          addresses = snap.data().paymentAddresses || [];
+          contacts  = snap.data().contactInfo || [];
+        }
+      } catch(e) { console.warn('[PaymentSettings]', e); }
+
+      renderPaySettingsBody(document.getElementById('psBackBody'), addresses, contacts, ov);
+    }
+
+    function renderPaySettingsBody(body, addresses, contacts, ov) {
+      const iSt = 'width:100%;padding:9px 12px;border-radius:9px;border:1.5px solid rgba(110,90,175,0.45);background:var(--bgInput);color:var(--textPrimary);font-size:13px;font-weight:600;outline:none;font-family:Rajdhani,sans-serif;box-sizing:border-box';
+
+      const addrRows = addresses.map((a,i) => `
+        <div class="ps-addr-row" style="display:flex;gap:6px;align-items:flex-start;margin-bottom:10px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+            <input class="ps-addr-label" placeholder="Label (e.g. BTC, USDT TRC20)" value="${escB(a.label||'')}" style="${iSt}" />
+            <input class="ps-addr-address" placeholder="Wallet address" value="${escB(a.address||'')}" style="${iSt};font-family:monospace" />
+          </div>
+          <button class="ps-addr-del" style="flex-shrink:0;padding:6px 10px;margin-top:4px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#f87171;font-size:14px;cursor:pointer">&#x2715;</button>
+        </div>`).join('');
+
+      const ctRows = contacts.map((c,i) => `
+        <div class="ps-ct-row" style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+          <input class="ps-ct-label" placeholder="Label" value="${escB(c.label||'')}" style="${iSt};flex:0.45;min-width:0" />
+          <input class="ps-ct-value" placeholder="Number / Username / Handle" value="${escB(c.value||'')}" style="${iSt};flex:1;min-width:0" />
+          <button class="ps-ct-del" style="flex-shrink:0;padding:6px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#f87171;font-size:14px;cursor:pointer">&#x2715;</button>
+        </div>`).join('');
+
+      body.innerHTML = `
+        <div style="margin-bottom:16px">
+          <label style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:10px">Payment Addresses</label>
+          <div id="psBackAddrList">${addrRows || '<div style="font-size:12px;color:var(--textMuted);margin-bottom:10px">No addresses yet.</div>'}</div>
+          <button id="psBackAddAddr" style="padding:7px 14px;border-radius:9px;border:1.5px dashed rgba(124,58,237,0.4);background:transparent;color:#a78bfa;font-size:12px;font-weight:700;cursor:pointer;font-family:Rajdhani,sans-serif">+ Add Address</button>
+          <div style="font-size:11px;color:var(--textMuted);margin-top:6px;line-height:1.5">Each address shows as a tab on the pending activation page. New users pick one and send payment to it, including their email in the memo.</div>
+        </div>
+        <div style="margin-bottom:20px">
+          <label style="font-size:11px;color:#34d399;font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:10px">Contact Information</label>
+          <div id="psBackCtList">${ctRows || '<div style="font-size:12px;color:var(--textMuted);margin-bottom:10px">No contacts yet.</div>'}</div>
+          <button id="psBackAddCt" style="padding:7px 14px;border-radius:9px;border:1.5px dashed rgba(52,211,153,0.4);background:transparent;color:#34d399;font-size:12px;font-weight:700;cursor:pointer;font-family:Rajdhani,sans-serif">+ Add Contact</button>
+        </div>
+        <div id="psBackMsg" style="font-size:12px;min-height:18px;margin-bottom:10px;text-align:center"></div>
+        <div style="display:flex;gap:10px">
+          <button id="psBackSave" class="btn btn-green" style="flex:1;justify-content:center;font-size:13px;font-weight:800">Save Changes</button>
+          <button onclick="document.getElementById('paymentSettingsBModal')?.remove()" class="btn" style="flex:0.4;justify-content:center;border:1.5px solid var(--glassBorder);font-size:13px">Cancel</button>
+        </div>`;
+
+      body.querySelector('#psBackAddAddr').onclick = () => {
+        const list = body.querySelector('#psBackAddrList');
+        list.querySelector('div[style*="No addresses"]')?.remove();
+        const d = document.createElement('div');
+        d.className = 'ps-addr-row';
+        d.style.cssText = 'display:flex;gap:6px;align-items:flex-start;margin-bottom:10px';
+        d.innerHTML = `<div style="flex:1;display:flex;flex-direction:column;gap:5px"><input class="ps-addr-label" placeholder="Label (e.g. BTC, USDT TRC20)" style="${iSt}"/><input class="ps-addr-address" placeholder="Wallet address" style="${iSt};font-family:monospace"/></div><button class="ps-addr-del" style="flex-shrink:0;padding:6px 10px;margin-top:4px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#f87171;font-size:14px;cursor:pointer">&#x2715;</button>`;
+        list.appendChild(d);
+      };
+
+      body.querySelector('#psBackAddCt').onclick = () => {
+        const list = body.querySelector('#psBackCtList');
+        list.querySelector('div[style*="No contacts"]')?.remove();
+        const d = document.createElement('div');
+        d.className = 'ps-ct-row';
+        d.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:10px';
+        d.innerHTML = `<input class="ps-ct-label" placeholder="Label" style="${iSt};flex:0.45;min-width:0"/><input class="ps-ct-value" placeholder="Number / Username / Handle" style="${iSt};flex:1;min-width:0"/><button class="ps-ct-del" style="flex-shrink:0;padding:6px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#f87171;font-size:14px;cursor:pointer">&#x2715;</button>`;
+        list.appendChild(d);
+      };
+
+      body.querySelector('#psBackAddrList').addEventListener('click', e => {
+        if (e.target.closest('.ps-addr-del')) e.target.closest('.ps-addr-row').remove();
+      });
+      body.querySelector('#psBackCtList').addEventListener('click', e => {
+        if (e.target.closest('.ps-ct-del')) e.target.closest('.ps-ct-row').remove();
+      });
+
+      body.querySelector('#psBackSave').onclick = async () => {
+        const btn  = body.querySelector('#psBackSave');
+        const msg  = body.querySelector('#psBackMsg');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+
+        const newAddresses = [...body.querySelectorAll('.ps-addr-row')].map(r => ({
+          label:   r.querySelector('.ps-addr-label').value.trim(),
+          address: r.querySelector('.ps-addr-address').value.trim()
+        })).filter(a => a.label && a.address);
+
+        const newContacts = [...body.querySelectorAll('.ps-ct-row')].map(r => ({
+          label: r.querySelector('.ps-ct-label').value.trim(),
+          value: r.querySelector('.ps-ct-value').value.trim()
+        })).filter(c => c.label && c.value);
+
+        try {
+          await db.doc('siteConfig/paymentInfo').set(
+            { paymentAddresses: newAddresses, contactInfo: newContacts },
+            { merge: true }
+          );
+          msg.textContent = '✓ Saved — visible to new users immediately';
+          msg.style.color = '#34d399';
+          setTimeout(() => ov.remove(), 1500);
+        } catch(e) {
+          msg.textContent = '✗ Error: ' + e.message;
+          msg.style.color = '#f87171';
+          btn.disabled = false;
+          btn.textContent = 'Save Changes';
+        }
+      };
     }
   </script>
 </body>
