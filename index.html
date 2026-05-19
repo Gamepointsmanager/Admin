@@ -12,10 +12,8 @@
   <link rel="icon" href="icon-192.png" type="image/png" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -390,21 +388,36 @@
 
   <script>
     // ============================================================
-    // FIREBASE INIT
+    // SUPABASE INIT  (service_role key — bypasses RLS — KEEP THIS PAGE PRIVATE)
     // ============================================================
-    const firebaseConfig = {
-      apiKey: "AIzaSyDjrOg8Q0sIXI6Jo5f4DT2x-kv9rkbaMx0",
-      authDomain: "auth.sweepadmin.com",
-      projectId: "sweepadministrator",
-      storageBucket: "sweepadministrator.firebasestorage.app",
-      messagingSenderId: "909535669253",
-      appId: "1:909535669253:web:8389b6274f269178c3806c",
-      measurementId: "G-0LMKKJRY4X"
-    };
+    const SUPABASE_URL = 'https://kzchxmulktygoqhiwpff.supabase.co';
+    const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Y2h4bXVsa3R5Z29xaGl3cGZmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODgyMjEyNSwiZXhwIjoyMDk0Mzk4MTI1fQ.yzxkdpWBBXaAlVtmucg76qOskLpMpLUEph2Zo-IzznM';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    // ── Helper: convert Supabase row timestamps to Firestore-like objects ──
+    // (keeps all the existing getUserStatus / getDaysLeft / formatDate helpers working)
+    function tsWrap(isoStr) {
+      if (!isoStr) return null;
+      const d = new Date(isoStr);
+      return { toDate: () => d, seconds: Math.floor(d.getTime()/1000) };
+    }
+    // Map a raw Supabase user_access row to the shape the UI expects
+    function mapUser(row) {
+      return {
+        uid:              row.uid,
+        email:            row.email,
+        displayName:      row.display_name,
+        photoURL:         row.photo_url || null,
+        gbUsername:       row.gb_username || null,
+        expiryDate:       tsWrap(row.expiry_date),
+        isDisabled:       row.is_disabled || false,
+        subscriptionCost: row.subscription_cost || null,
+        subPeriodStart:   tsWrap(row.sub_period_start),
+        subPeriodEnd:     tsWrap(row.sub_period_end),
+        lastLogin:        tsWrap(row.last_login),
+        createdAt:        tsWrap(row.created_at),
+      };
+    }
 
     const ADMIN_EMAIL = 'service@sweepadmin.com';
     const $ = (s) => document.querySelector(s);
@@ -464,7 +477,8 @@
     // Load per-user message counts for the indicator icons in the user list
     async function loadMsgCounts() {
       try {
-        const snap = await db.collection('popupMessages').where('targetAll','==',false).get();
+        const { data: pmRows } = await supabase.from('popup_messages').select('*').eq('target_all', false);
+        const snap = { docs: (pmRows||[]).map(r => ({ id: r.id, data: () => ({ targetUid: r.target_uid, read: r.read, ...r }) })) };
         const counts = {};
         snap.docs.forEach(doc => {
           const d = doc.data();
@@ -626,18 +640,11 @@
         btn.innerHTML = '<span style="animation:pulse 1s infinite">Signing in...</span>';
         btn.disabled = true;
         try {
-          const provider = new firebase.auth.GoogleAuthProvider();
-          try {
-            await auth.signInWithPopup(provider);
-          } catch (popupErr) {
-            if (popupErr.code === 'auth/popup-blocked' ||
-                popupErr.code === 'auth/cancelled-popup-request' ||
-                popupErr.code === 'auth/operation-not-supported-in-this-environment') {
-              await auth.signInWithRedirect(provider);
-            } else {
-              throw popupErr;
-            }
-          }
+          const { error: signInError } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.href }
+          });
+          if (signInError) throw signInError;
         } catch(e) {
           const err = $('#loginError');
           err.classList.remove('hidden');
@@ -658,7 +665,7 @@
           <h2 style="font-family:'Orbitron',monospace;font-size:18px;color:var(--red);margin-bottom:12px">ACCESS DENIED</h2>
           <p style="color:var(--textMuted);font-size:14px;margin-bottom:24px">This panel is restricted to the admin account only.</p>
           <p style="color:var(--textMuted);font-size:12px;margin-bottom:24px">Signed in as: ${state.user?.email || ''}</p>
-          <button onclick="firebase.auth().signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
+          <button onclick="supabase.auth.signOut()" style="padding:12px 24px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:14px;font-weight:600;cursor:pointer;font-family:'Rajdhani',sans-serif">Sign Out</button>
         </div>
       </div>`;
     }
@@ -746,7 +753,7 @@
             <div style="font-size:10px;color:var(--textMuted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px">Admin</div>
             <div style="font-size:12px;color:var(--textSecondary);line-height:1.8;margin-bottom:12px">${state.user?.email || ''}</div>
             <button onclick="showPaymentSettingsModal()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(124,58,237,0.45);background:rgba(124,58,237,0.1);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px;margin-bottom:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Payment & Contact Settings</button>
-            <button onclick="firebase.auth().signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+            <button onclick="supabase.auth.signOut()" style="width:100%;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.1);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;text-align:left;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
           </div>
         </div>`;
     }
@@ -1038,12 +1045,12 @@
         try {
           const trialStart = new Date();
           const newExpiry = new Date(Date.now() + 3*24*60*60*1000);
-          await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
-            isDisabled: false,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(trialStart),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
-          });
+          await supabase.from('user_access').update({
+            expiry_date: newExpiry.toISOString(),
+            is_disabled: false,
+            sub_period_start: trialStart.toISOString(),
+            sub_period_end: newExpiry.toISOString(),
+          }).eq('uid', u.uid);
           showToast('🎁 Free trial activated (3 days)', 'success');
           const updated = state.users.find(x=>x.uid===u.uid); if (updated) state.selectedUser=updated;
           closeUserDetail();
@@ -1056,12 +1063,12 @@
         try {
           const unlimStart = new Date();
           const newExpiry = new Date(Date.now() + 100*365*24*60*60*1000);
-          await db.collection('userAccess').doc(u.uid).update({
-            expiryDate: firebase.firestore.Timestamp.fromDate(newExpiry),
-            isDisabled: false,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(unlimStart),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(newExpiry),
-          });
+          await supabase.from('user_access').update({
+            expiry_date: newExpiry.toISOString(),
+            is_disabled: false,
+            sub_period_start: unlimStart.toISOString(),
+            sub_period_end: newExpiry.toISOString(),
+          }).eq('uid', u.uid);
           showToast('♾️ Unlimited access granted','success');
           closeUserDetail();
         } catch(e) { showToast('❌ Failed: '+e.message,'error'); }
@@ -1105,18 +1112,26 @@
       const container = document.getElementById('msgStatusContent');
       if (!container) return;
       try {
-        const [userMsgs, allMsgs] = await Promise.all([
-          db.collection('popupMessages').where('targetUid','==',uid).limit(20).get(),
-          db.collection('popupMessages').where('targetAll','==',true).limit(10).get()
-        ]);
+        const { data: umRows } = await supabase.from('popup_messages').select('*').eq('target_uid', uid).order('created_at', { ascending: false }).limit(20);
+        const { data: amRows } = await supabase.from('popup_messages').select('*').eq('target_all', true).order('created_at', { ascending: false }).limit(10);
         const seen = new Set();
-        const docs = [];
-        for (const doc of [...userMsgs.docs, ...allMsgs.docs]) {
-          if (seen.has(doc.id)) continue;
-          seen.add(doc.id);
-          docs.push(doc);
+        const rawDocs = [];
+        for (const r of [...(umRows||[]), ...(amRows||[])]) {
+          if (seen.has(r.id)) continue;
+          seen.add(r.id);
+          rawDocs.push(r);
         }
-        docs.sort((a,b) => (b.data().createdAt?.seconds||0) - (a.data().createdAt?.seconds||0));
+        rawDocs.sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+        const docs = rawDocs.map(r => ({
+          id: r.id,
+          data: () => ({
+            targetUid: r.target_uid, targetAll: r.target_all,
+            message: r.message, type: r.type,
+            read: r.read, dismissed: r.dismissed,
+            createdAt: r.created_at ? { seconds: Math.floor(new Date(r.created_at).getTime()/1000) } : null,
+            sentBy: r.sent_by
+          })
+        }));
 
         if (docs.length === 0) {
           container.innerHTML = '<span style="color:var(--textMuted);font-size:13px">No messages sent yet</span>';
@@ -1196,15 +1211,11 @@
       if (!uid) return;
       try {
         const message = decodeURIComponent(escape(atob(encodedMsg)));
-        await db.collection('popupMessages').add({
-          targetUid: uid,
-          targetAll: false,
-          message,
-          type: msgType,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          read: false,
-          dismissed: false,
-          sentBy: state.user?.email || 'admin'
+        await supabase.from('popup_messages').insert({
+          target_uid: uid, target_all: false,
+          message, type: msgType,
+          read: false, dismissed: false,
+          sent_by: state.user?.email || 'admin'
         });
         showToast('✅ Message resent!', 'success');
         setTimeout(() => loadMessageStatus(uid), 800);
@@ -1216,13 +1227,11 @@
     async function deleteAllUserMessages(uid) {
       if (!confirm('Delete ALL messages for this user? This cannot be undone.')) return;
       try {
-        const snap = await db.collection('popupMessages').where('targetUid','==',uid).get();
-        const batch = db.batch();
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+        const { data: delRows } = await supabase.from('popup_messages').select('id').eq('target_uid', uid);
+        await supabase.from('popup_messages').delete().eq('target_uid', uid);
         const container = document.getElementById('msgStatusContent');
         if (container) container.innerHTML = '<span style="color:var(--textMuted);font-size:13px">No messages sent yet</span>';
-        showToast(`✅ Deleted ${snap.size} message${snap.size!==1?'s':''}`, 'success');
+        showToast(`✅ Deleted ${(delRows||[]).length} message${(delRows||[]).length!==1?'s':''}`, 'success');
       } catch(e) {
         showToast('❌ Failed: ' + e.message, 'error');
       }
@@ -1231,7 +1240,7 @@
     async function deletePopupMessage(docId) {
       if (!confirm('Delete this message?')) return;
       try {
-        await db.collection('popupMessages').doc(docId).delete();
+        await supabase.from('popup_messages').delete().eq('id', docId);
         const row = document.getElementById('msgrow-' + docId);
         if (row) row.remove();
         const container = document.getElementById('msgStatusContent');
@@ -1268,15 +1277,12 @@
         const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 
         // Auto-set subscription period to match the access period
-        const startTs = firebase.firestore.Timestamp.fromDate(base);
-        const endTs   = firebase.firestore.Timestamp.fromDate(newExpiry);
-
-        await db.collection('userAccess').doc(u.uid).update({
-          expiryDate:     firebase.firestore.Timestamp.fromDate(newExpiry),
-          isDisabled:     false,
-          subPeriodStart: startTs,
-          subPeriodEnd:   endTs,
-        });
+        await supabase.from('user_access').update({
+          expiry_date:      newExpiry.toISOString(),
+          is_disabled:      false,
+          sub_period_start: base.toISOString(),
+          sub_period_end:   newExpiry.toISOString(),
+        }).eq('uid', u.uid);
 
         showToast(`✅ Extended by ${days} days`, 'success');
         closeUserDetail();
@@ -1290,9 +1296,7 @@
       if (!u) return;
       try {
         const newState = !u.isDisabled;
-        await db.collection('userAccess').doc(u.uid).update({
-          isDisabled: newState,
-        });
+        await supabase.from('user_access').update({ is_disabled: newState }).eq('uid', u.uid);
         showToast(newState ? '🚫 User disabled' : '✅ User enabled', 'success');
         closeUserDetail();
       } catch(e) {
@@ -1305,10 +1309,7 @@
       if (!u) return;
       if (!confirm(`Remove all access for ${u.email}?\nThis will set their expiry to none.`)) return;
       try {
-        await db.collection('userAccess').doc(u.uid).update({
-          expiryDate: null,
-          isDisabled: false,
-        });
+        await supabase.from('user_access').update({ expiry_date: null, is_disabled: false }).eq('uid', u.uid);
         showToast('🗑️ Access revoked', 'success');
         closeUserDetail();
       } catch(e) {
@@ -1362,27 +1363,16 @@
       const u = state.selectedUser;
       if (!u) return;
       try {
-        // Delete all known sub-collections and the main userAccess doc
-        // First delete from userAccess
-        await db.collection('userAccess').doc(u.uid).delete();
-
-        // Also try to delete from gbUsernames if the user has one
+        // Delete user data — CASCADE rules handle most child tables automatically
+        await supabase.from('user_access').delete().eq('uid', u.uid);
         if (u.gbUsername) {
-          try {
-            await db.collection('gbUsernames').doc(u.gbUsername.toLowerCase()).delete();
-          } catch(e) { /* username doc may not exist */ }
+          await supabase.from('gb_usernames').delete().eq('username', u.gbUsername.toLowerCase()).catch(()=>{});
         }
-
-        // Try to delete user-specific sub-collections (companies, payments, bills etc.)
-        const subcollections = ['companies', 'payments', 'bills', 'subscriptions'];
-        for (const sub of subcollections) {
-          try {
-            const snap = await db.collection('userAccess').doc(u.uid).collection(sub).get();
-            const batch = db.batch();
-            snap.docs.forEach(doc => batch.delete(doc.ref));
-            if (snap.docs.length > 0) await batch.commit();
-          } catch(e) { /* subcollection may not exist */ }
-        }
+        // Delete from Supabase Auth (requires service_role)
+        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${u.uid}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'apikey': SUPABASE_SERVICE_KEY }
+        }).catch(()=>{});
 
         showToast('🗑️ Account deleted: ' + u.email, 'success');
         closeUserDetail();
@@ -1413,49 +1403,26 @@
         };
 
         // Copy all top-level fields from userAccess doc
-        const docSnap = await db.collection('userAccess').doc(u.uid).get();
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          // Convert Firestore timestamps to ISO strings for JSON
-          for (const [key, val] of Object.entries(data)) {
-            if (val && typeof val === 'object' && typeof val.toDate === 'function') {
-              userData.profile[key] = val.toDate().toISOString();
-            } else {
-              userData.profile[key] = val;
-            }
-          }
-        }
+        const { data: uaRow } = await supabase.from('user_access').select('*').eq('uid', u.uid).single();
+        if (uaRow) userData.profile = uaRow;
 
-        // Fetch known sub-collections
-        const subcollections = ['companies', 'payments', 'bills', 'subscriptions', 'games', 'history'];
-        for (const sub of subcollections) {
-          try {
-            const snap = await db.collection('userAccess').doc(u.uid).collection(sub).get();
-            if (snap.docs.length > 0) {
-              userData[sub] = snap.docs.map(doc => {
-                const d = doc.data();
-                const converted = { _id: doc.id };
-                for (const [key, val] of Object.entries(d)) {
-                  if (val && typeof val === 'object' && typeof val.toDate === 'function') {
-                    converted[key] = val.toDate().toISOString();
-                  } else {
-                    converted[key] = val;
-                  }
-                }
-                return converted;
-              });
-            }
-          } catch(e) { /* subcollection may not exist, skip silently */ }
+        // Fetch Supabase sub-tables
+        const supabaseTables = [
+          { key: 'companies',        table: 'companies'        },
+          { key: 'bills',            table: 'bills'            },
+          { key: 'master_games',     table: 'master_games'     },
+          { key: 'cf_transactions',  table: 'cf_transactions'  },
+          { key: 'cf_op_expenses',   table: 'cf_op_expenses'   },
+          { key: 'cf_shareholders',  table: 'cf_shareholders'  },
+          { key: 'org_employees',    table: 'org_employees'    },
+        ];
+        for (const { key, table } of supabaseTables) {
+          const { data: rows } = await supabase.from(table).select('*').eq('owner_uid', u.uid).catch(()=>({data:[]}));
+          if (rows && rows.length > 0) userData[key] = rows;
         }
-
-        // Also check gbUsernames
         if (u.gbUsername) {
-          try {
-            const unSnap = await db.collection('gbUsernames').doc(u.gbUsername.toLowerCase()).get();
-            if (unSnap.exists) {
-              userData.gbUsernameRecord = unSnap.data();
-            }
-          } catch(e) {}
+          const { data: un } = await supabase.from('gb_usernames').select('*').eq('username', u.gbUsername.toLowerCase()).maybeSingle();
+          if (un) userData.gbUsernameRecord = un;
         }
 
         // Generate and download JSON file
@@ -1729,11 +1696,11 @@
         const btn = document.getElementById('saveCostBtn');
         btn.disabled = true; btn.textContent = 'Saving...';
         try {
-          await db.collection('userAccess').doc(uid).update({
-            subscriptionCost: cost,
-            subPeriodStart: firebase.firestore.Timestamp.fromDate(new Date(startVal + 'T00:00:00')),
-            subPeriodEnd:   firebase.firestore.Timestamp.fromDate(new Date(endVal   + 'T23:59:59')),
-          });
+          await supabase.from('user_access').update({
+            subscription_cost: cost,
+            sub_period_start: new Date(startVal + 'T00:00:00').toISOString(),
+            sub_period_end:   new Date(endVal   + 'T23:59:59').toISOString(),
+          }).eq('uid', uid);
           showToast('✅ Subscription cost saved', 'success');
           el.remove();
         } catch(e) { showToast('❌ Failed: ' + e.message, 'error'); btn.disabled=false; btn.textContent='Save'; }
@@ -1743,11 +1710,11 @@
       if (clearBtn) clearBtn.onclick = async () => {
         if (!confirm('Remove subscription cost for this user?')) return;
         try {
-          await db.collection('userAccess').doc(uid).update({
-            subscriptionCost: firebase.firestore.FieldValue.delete(),
-            subPeriodStart:   firebase.firestore.FieldValue.delete(),
-            subPeriodEnd:     firebase.firestore.FieldValue.delete(),
-          });
+          await supabase.from('user_access').update({
+            subscription_cost: null,
+            sub_period_start: null,
+            sub_period_end: null,
+          }).eq('uid', uid);
           showToast('Cost removed', 'success');
           el.remove();
         } catch(e) { showToast('❌ Failed: ' + e.message, 'error'); }
@@ -1767,15 +1734,11 @@
       const btn = document.getElementById('sendPopupBtn');
       if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
       try {
-        await db.collection('popupMessages').add({
-          targetUid: uid,
-          targetAll: false,
-          message: msgText,
-          type: msgType,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          read: false,
-          dismissed: false,
-          sentBy: state.user?.email || 'admin'
+        await supabase.from('popup_messages').insert({
+          target_uid: uid, target_all: false,
+          message: msgText, type: msgType,
+          read: false, dismissed: false,
+          sent_by: state.user?.email || 'admin'
         });
         showToast('✅ Popup message sent!', 'success');
         if (document.getElementById('popupMsgText')) document.getElementById('popupMsgText').value = '';
@@ -1853,12 +1816,11 @@
         const btn = document.getElementById('broadcastSendBtn');
         btn.disabled = true; btn.textContent = 'Sending...';
         try {
-          await db.collection('popupMessages').add({
-            targetUid: null, targetAll: true,
+          await supabase.from('popup_messages').insert({
+            target_uid: null, target_all: true,
             message: msgText, type: msgType,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             read: false, dismissed: false,
-            sentBy: state.user?.email || 'admin'
+            sent_by: state.user?.email || 'admin'
           });
           el.remove();
           showToast('✅ Broadcast sent to all users!', 'success');
@@ -1874,12 +1836,10 @@
         const btn = document.getElementById('broadcastDeleteAllBtn');
         btn.disabled = true; btn.textContent = 'Deleting...';
         try {
-          const snap = await db.collection('popupMessages').where('targetAll','==',true).get();
-          const batch = db.batch();
-          snap.docs.forEach(d => batch.delete(d.ref));
-          await batch.commit();
+          const { data: bRows } = await supabase.from('popup_messages').select('id').eq('target_all', true);
+          await supabase.from('popup_messages').delete().eq('target_all', true);
           el.remove();
-          showToast(`✅ Deleted ${snap.size} broadcast message${snap.size !== 1 ? 's' : ''}`, 'success');
+          showToast(`✅ Deleted ${(bRows||[]).length} broadcast message${(bRows||[]).length !== 1 ? 's' : ''}`, 'success');
         } catch(e) {
           showToast('❌ Failed: ' + e.message, 'error');
           btn.disabled = false;
@@ -1893,46 +1853,64 @@
     // ============================================================
     let unsubUsers = null;
 
+    async function loadUsers() {
+      const { data, error } = await supabase
+        .from('user_access')
+        .select('*')
+        .order('last_login', { ascending: false });
+      if (error) { console.error('loadUsers error:', error); return; }
+      state.users = (data || []).map(mapUser);
+      filterUsers();
+      if (state.view === 'dashboard') render();
+    }
+
     function listenUsers() {
-      unsubUsers = db.collection('userAccess').orderBy('lastLogin', 'desc').onSnapshot(snap => {
-        state.users = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-        filterUsers();
-        if (state.view === 'dashboard') render();
-      }, err => {
-        console.error('Firestore listen error:', err);
-      });
+      loadUsers(); // initial load
+      // Subscribe to real-time changes
+      unsubUsers = supabase.channel('admin_user_access')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_access' }, () => {
+          loadUsers();
+        })
+        .subscribe();
     }
 
     // ============================================================
     // AUTH STATE
     // ============================================================
-    auth.getRedirectResult().catch(() => {});
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
-
-    auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        state.user = { uid: user.uid, email: user.email };
-
-        // Only admin allowed
+    // Handle OAuth redirect result on page load
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const user = session.user;
+        state.user = { uid: user.id, email: user.email };
         if (user.email !== ADMIN_EMAIL) {
-          state.view = 'denied';
-          render();
-          return;
+          state.view = 'denied'; render(); return;
         }
-
-        state.view = 'loading';
-        render();
+        state.view = 'loading'; render();
         listenUsers();
-        state.view = 'dashboard';
-        render();
-        loadMsgCounts(); // load per-user message counts for list indicators
+        state.view = 'dashboard'; render();
+        loadMsgCounts();
       } else {
-        if (unsubUsers) { unsubUsers(); unsubUsers = null; }
-        state.user = null;
-        state.users = [];
-        state.filteredUsers = [];
-        state.view = 'login';
-        render();
+        state.view = 'login'; render();
+      }
+    });
+
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const user = session.user;
+        state.user = { uid: user.id, email: user.email };
+        if (user.email !== ADMIN_EMAIL) {
+          state.view = 'denied'; render(); return;
+        }
+        if (state.view === 'login' || state.view === 'loading') {
+          state.view = 'loading'; render();
+          listenUsers();
+          state.view = 'dashboard'; render();
+          loadMsgCounts();
+        }
+      } else {
+        if (unsubUsers) { supabase.removeChannel(unsubUsers); unsubUsers = null; }
+        state.user = null; state.users = []; state.filteredUsers = [];
+        state.view = 'login'; render();
       }
     });
 
@@ -1999,10 +1977,10 @@
 
       let addresses = [], contacts = [];
       try {
-        const snap = await db.doc('siteConfig/paymentInfo').get();
-        if (snap.exists) {
-          addresses = snap.data().paymentAddresses || [];
-          contacts  = snap.data().contactInfo || [];
+        const { data: siteRow } = await supabase.from('site_config').select('*').eq('doc_id', 'paymentInfo').maybeSingle();
+        if (siteRow) {
+          addresses = siteRow.payment_addresses || [];
+          contacts  = siteRow.contact_info || [];
         }
       } catch(e) { console.warn('[PaymentSettings]', e); }
 
@@ -2090,10 +2068,11 @@
         })).filter(c => c.label && c.value);
 
         try {
-          await db.doc('siteConfig/paymentInfo').set(
-            { paymentAddresses: newAddresses, contactInfo: newContacts },
-            { merge: true }
-          );
+          await supabase.from('site_config').upsert({
+            doc_id: 'paymentInfo',
+            payment_addresses: newAddresses,
+            contact_info: newContacts
+          }, { onConflict: 'doc_id' });
           msg.textContent = '✓ Saved — visible to new users immediately';
           msg.style.color = '#34d399';
           setTimeout(() => ov.remove(), 1500);
